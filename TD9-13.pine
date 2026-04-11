@@ -1,16 +1,16 @@
-//@version=5
-indicator("DeMARK Setup (9-13) - Perfected Arrow", overlay=true, max_labels_count=500)
+//@version=6
+indicator('DeMARK Setup (9-13) - Perfected Arrow', overlay = true, max_labels_count = 500)
 
 // --- 输入设置 ---
-showOnlyNine = input.bool(true, "Setup完成后隐藏1-8计数", tooltip="开启后，只有完成9计数才会保留数字，否则会清理掉之前的1-8")
-buyColor     = input.color(color.rgb(245, 136, 239), "买入计数颜色 (Buy Setup)")
-sellColor    = input.color(color.rgb(161, 248, 150), "卖出计数颜色 (Sell Setup)")
+showOnlyNine = input.bool(true, 'Setup完成后隐藏1-8计数', tooltip = '开启后，只有完成9计数才会保留数字，否则会清理掉之前的1-8')
+buyColor = input.color(color.rgb(245, 136, 239), '买入计数颜色 (Buy Setup)')
+sellColor = input.color(color.rgb(161, 248, 150), '卖出计数颜色 (Sell Setup)')
 
 // --- 变量定义 ---
 var int buySetup = 0
 var int sellSetup = 0
-var label[] buyLabels = array.new_label(0)
-var label[] sellLabels = array.new_label(0)
+var array<label> buyLabels = array.new_label(0)
+var array<label> sellLabels = array.new_label(0)
 
 // 完美化信号触发变量
 bool isBuyPerfected = false
@@ -19,26 +19,29 @@ bool isSellPerfected = false
 // --- 辅助函数：清理标签 ---
 clean_labels(labelArray) =>
     if array.size(labelArray) > 0
-        for i = 0 to array.size(labelArray) - 1
+        for i = 0 to array.size(labelArray) - 1 by 1
             label.delete(array.get(labelArray, i))
         array.clear(labelArray)
 
 // --- Price Flip 与 Setup 逻辑 ---
 if close < close[4]
-    buySetup += 1
+    buySetup := buySetup + 1
     sellSetup := 0
+    sellSetup
 else if close > close[4]
-    sellSetup += 1
+    sellSetup := sellSetup + 1
     buySetup := 0
+    buySetup
 else
     buySetup := 0
     sellSetup := 0
+    sellSetup
 
 // --- 处理 Buy Setup 绘图与完美化 ---
 if buySetup > 0
     if buySetup == 1
         clean_labels(buyLabels)
-    
+
     // 基础文字
     string txt = str.tostring(buySetup)
 
@@ -48,18 +51,20 @@ if buySetup > 0
         if low < min67 or low[1] < min67
             isBuyPerfected := true
             // 使用换行符，将尖朝上的三角形放在数字 9 的下方
-            txt := "9\n▲"
-        lbl = label.new(bar_index, low, text=txt, color=color.new(buyColor, 100), textcolor=buyColor, style=label.style_label_up, size=size.large)
+            txt := '9\n▲'
+            txt
+        lbl = label.new(bar_index, low, text = txt, color = color.new(buyColor, 100), textcolor = buyColor, style = label.style_label_up, size = size.large)
         array.push(buyLabels, lbl)
-            
+
         if showOnlyNine
-            for i = 0 to 7
+            for i = 0 to 7 by 1
                 label.delete(array.get(buyLabels, i))
-        array.clear(buyLabels) 
+        array.clear(buyLabels)
     else if buySetup > 9
-        buySetup := 0 
+        buySetup := 0
+        buySetup
     else if buySetup < 9
-        lbl = label.new(bar_index, low, text=txt, color=color.new(buyColor, 100), textcolor=buyColor, style=label.style_label_up, size=size.large)
+        lbl = label.new(bar_index, low, text = txt, color = color.new(buyColor, 100), textcolor = buyColor, style = label.style_label_up, size = size.large)
         array.push(buyLabels, lbl)
 
 
@@ -67,29 +72,28 @@ if buySetup > 0
 if sellSetup > 0
     if sellSetup == 1
         clean_labels(sellLabels)
-    
+
     // 基础文字
     string txt = str.tostring(sellSetup)
 
-    // lbl = label.new(bar_index, high, text=txt, color=color.new(sellColor, 100), textcolor=sellColor, style=label.style_label_down, size=size.large)
-    // array.push(sellLabels, lbl)
-    
     if sellSetup == 9
         // 判定 Perfected Sell: 8或9的High > 6和7的High
         max67 = math.max(high[2], high[3])
         if high > max67 or high[1] > max67
             isSellPerfected := true
-             // 使用换行符，将尖朝下的三角形放在数字 9 的上方
-            txt := "▼\n9"
-        lbl = label.new(bar_index, high, text=txt, color=color.new(sellColor, 100), textcolor=sellColor, style=label.style_label_down, size=size.large)
+            // 使用换行符，将尖朝下的三角形放在数字 9 的上方
+            txt := '▼\n9'
+            txt
+        lbl = label.new(bar_index, high, text = txt, color = color.new(sellColor, 100), textcolor = sellColor, style = label.style_label_down, size = size.large)
         array.push(sellLabels, lbl)
 
         if showOnlyNine
-            for i = 0 to 7
+            for i = 0 to 7 by 1
                 label.delete(array.get(sellLabels, i))
         array.clear(sellLabels)
     else if sellSetup > 9
         sellSetup := 0
+        sellSetup
     else if sellSetup < 9
-        lbl = label.new(bar_index, high, text=txt, color=color.new(sellColor, 100), textcolor=sellColor, style=label.style_label_down, size=size.large)
+        lbl = label.new(bar_index, high, text = txt, color = color.new(sellColor, 100), textcolor = sellColor, style = label.style_label_down, size = size.large)
         array.push(sellLabels, lbl)
