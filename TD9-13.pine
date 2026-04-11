@@ -3,6 +3,7 @@ indicator('DeMARK Setup (9-13) - Perfected Arrow', overlay = true, max_labels_co
 
 // --- 输入设置 ---
 showOnlyNine = input.bool(true, 'Setup完成后隐藏1-8计数', tooltip = '开启后，只有完成9计数才会保留数字，否则会清理掉之前的1-8')
+int maxLineCount = input.int(3, "保留最近 TDST 线条数量", minval = 0, tooltip = "决定图表上同时显示的支撑线和阻力线的最大数量")
 buyColor = input.color(color.rgb(245, 136, 239), '买入计数颜色 (Buy Setup)')
 sellColor = input.color(color.rgb(161, 248, 150), '卖出计数颜色 (Sell Setup)')
 
@@ -100,42 +101,126 @@ if sellSetup > 0
 
 
 // --- TDST 逻辑续写 ---
-var line tdstResLine = na
-var line tdstSupLine = na
-var float tdstResLevel = na
-var float tdstSupLevel = na
+// 初始化持久化数组
+var array<line> resLinesArray = array.new_line(0)
+var array<line> supLinesArray = array.new_line(0)
+var array<float> resPricesArray = array.new_float(0)
+var array<float> supPricesArray = array.new_float(0)
 
-// 当 Buy Setup 9 完成时更新阻力线
-if buySetup == 9
-    float highestTrueHigh = high[0]
-    for i = 1 to 8 by 1
-        highestTrueHigh := math.max(highestTrueHigh, high[i])
-    tdstResLevel := highestTrueHigh
-    if not na(tdstResLine)
-        line.delete(tdstResLine)
-    tdstResLine := line.new(bar_index - 8, tdstResLevel, bar_index, tdstResLevel, color = buyColor, width = 2, style = line.style_solid)
+// // 当 Buy Setup 9 完成时更新阻力线
+// // --- 处理买入 9 转 (阻力线) ---
+// if buySetup == 9
+//     float highestTrueHigh = high[0]
+//     for i = 1 to 8 by 1
+//         highestTrueHigh := math.max(highestTrueHigh, high[i])
+    
+//     // 创建新线
+//     line resLine = line.new(bar_index - 8, highestTrueHigh, bar_index, highestTrueHigh, color = buyColor, width = 2, style = line.style_solid)
+    
+//     // 放入数组追踪
+//     array.push(resLinesArray, resLine)
+//     array.push(resPricesArray, highestTrueHigh)
+    
+//     // 如果超过用户设置数量，删除最老的一根
+//     if array.size(resLinesArray) > maxLineCount
+//         line oldLine = array.shift(resLinesArray)
+//         line.delete(oldLine)
+//         array.shift(resPricesArray)
 
-// 当 Sell Setup 9 完成时更新支撑线
-if sellSetup == 9
-    float lowestTrueLow = low[0]
-    for i = 1 to 8 by 1
-        lowestTrueLow := math.min(lowestTrueLow, low[i])
-    tdstSupLevel := lowestTrueLow
-    if not na(tdstSupLine)
-        line.delete(tdstSupLine)
-    tdstSupLine := line.new(bar_index - 8, tdstSupLevel, bar_index, tdstSupLevel, color = sellColor, width = 2, style = line.style_solid)
+// // 当 Sell Setup 9 完成时更新支撑线
+// // --- 处理卖出 9 转 (支撑线) ---
+// if sellSetup == 9
+//     float lowestTrueLow = low[0]
+//     for i = 1 to 8 by 1
+//         lowestTrueLow := math.min(lowestTrueLow, low[i])
+    
+//     line supLine = line.new(bar_index - 8, lowestTrueLow, bar_index, lowestTrueLow, color = sellColor, width = 2, style = line.style_solid)
+    
+//     array.push(supLinesArray, supLine)
+//     array.push(supPricesArray, lowestTrueLow)
+    
+//     if array.size(supLinesArray) > maxLineCount
+//         line oldLine = array.shift(supLinesArray)
+//         line.delete(oldLine)
+//         array.shift(supPricesArray)
 
-// 线条延伸与突破逻辑
-if not na(tdstResLine)
-    if close > tdstResLevel
-        tdstResLine := na
-        tdstResLevel := na
-    else
-        line.set_x2(tdstResLine, bar_index)
 
-if not na(tdstSupLine)
-    if close < tdstSupLevel
-        tdstSupLine := na
-        tdstSupLevel := na
-    else
-        line.set_x2(tdstSupLine, bar_index)
+// // 线条延伸与突破逻辑
+// // --- 遍历数组：处理线条延伸与突破停止 ---
+// // 处理阻力线延伸
+// if array.size(resLinesArray) > 0
+//     for i = array.size(resLinesArray) - 1 to 0 by 1
+//         line  currLine  = array.get(resLinesArray, i)
+//         float currPrice = array.get(resPricesArray, i)
+        
+//         // 检查该线是否已经被突破 (收盘价大于阻力)
+//         if not na(currLine)
+//             if close > currPrice
+//                 // 突破发生，停止延伸（这里可以选择保留原样或标记，目前逻辑是停止在当前位置）
+//                 array.set(resLinesArray, i, na) 
+//             else
+//                 line.set_x2(currLine, bar_index)
+
+// // 处理支撑线延伸
+// if array.size(supLinesArray) > 0
+//     for i = array.size(supLinesArray) - 1 to 0 by 1
+//         line  currLine  = array.get(supLinesArray, i)
+//         float currPrice = array.get(supPricesArray, i)
+        
+//         if not na(currLine)
+//             if close < currPrice
+//                 array.set(supLinesArray, i, na)
+//             else
+//                 line.set_x2(currLine, bar_index)
+
+
+// --- TDST 综合管理方法 (Method/Function) ---
+// 该函数封装了：1. 开启/关闭检测 2. 数组维护 3. 极值计算 4. 线条延伸 5. 突破判定
+process_tdst_logic(int limit, bool isBuyBus, int setupCount, array<line> linesArr, array<float> pricesArr, color clr) =>
+    // A. 如果 limit 为 0，执行彻底清理并退出
+    if limit == 0
+        if array.size(linesArr) > 0
+            for i = 0 to array.size(linesArr) - 1 by 1
+                line.delete(array.get(linesArr, i))
+            array.clear(linesArr)
+            array.clear(pricesArr)
+    
+    // B. 如果 limit > 0，执行核心逻辑
+    if limit > 0
+        // 1. 生成逻辑：当 Setup 达到 9 时，计算极值并创建新线
+        if setupCount == 9
+            float extremePrice = isBuyBus ? high[0] : low[0]
+            for i = 1 to 8 by 1
+                extremePrice := isBuyBus ? math.max(extremePrice, high[i]) : math.min(extremePrice, low[i])
+            
+            // 创建线段
+            line newLine = line.new(bar_index - 8, extremePrice, bar_index, extremePrice, color = clr, width = 2)
+            array.push(linesArr, newLine)
+            array.push(pricesArr, extremePrice)
+            
+            // 数量溢出处理 (FIFO)
+            if array.size(linesArr) > limit
+                line.delete(array.shift(linesArr))
+                array.shift(pricesArr)
+
+        // 2. 实时更新逻辑：遍历数组处理延伸与突破
+        if array.size(linesArr) > 0
+            for i = array.size(linesArr) - 1 to 0 by 1
+                line  currL = array.get(linesArr, i)
+                float currP = array.get(pricesArr, i)
+                if not na(currL)
+                    // 突破判定：买入阻力线被收盘突破，或卖出支撑线被收盘跌破
+                    bool isBroken = isBuyBus ? (close > currP) : (close < currP)
+                    if isBroken
+                        array.set(linesArr, i, na) // 停止延伸标记
+                    else
+                        line.set_x2(currL, bar_index) // 继续延伸
+
+// --- 尾部调用续写 ---
+
+// 每一根 K 线都调用这个封装好的方法
+// 处理买入序列产生的阻力线 (TDST Resistance)
+process_tdst_logic(maxLineCount, true, buySetup, resLinesArray, resPricesArray, buyColor)
+
+// 处理卖出序列产生的支撑线 (TDST Support)
+process_tdst_logic(maxLineCount, false, sellSetup, supLinesArray, supPricesArray, sellColor)
