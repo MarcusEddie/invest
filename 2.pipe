@@ -1,0 +1,257 @@
+//@version=6
+indicator('DeMARK Setup (9-13) - Perfected Arrow', overlay = true, max_labels_count = 500)
+
+// --- 输入设置 ---
+showOnlyNine = input.bool(true, 'Setup完成后隐藏1-8计数', tooltip = '开启后，只有完成9计数才会保留数字，否则会清理掉之前的1-8')
+int maxLineCount = input.int(3, "保留最近 TDST 线条数量", minval = 0, tooltip = "决定图表上同时显示的支撑线和阻力线的最大数量")
+bool useSequential = input.bool(false, "执行 Sequential Countdown", group="Countdown 设置")
+bool useCombo      = input.bool(false, "执行 Combo Countdown", group="Countdown 设置")
+buyColor = input.color(color.rgb(245, 136, 239), '买入计数颜色 (Buy Setup)')
+sellColor = input.color(color.rgb(161, 248, 150), '卖出计数颜色 (Sell Setup)')
+
+// --- 变量定义 ---
+var int buySetup = 0
+var int sellSetup = 0
+var array<label> buyLabels = array.new_label(0)
+var array<label> sellLabels = array.new_label(0)
+
+// 完美化信号触发变量
+bool isBuyPerfected = false
+bool isSellPerfected = false
+
+// --- 辅助函数：清理标签 ---
+clean_labels(labelArray) =>
+    if array.size(labelArray) > 0
+        for i = 0 to array.size(labelArray) - 1 by 1
+            label.delete(array.get(labelArray, i))
+        array.clear(labelArray)
+
+// --- Price Flip 与 Setup 逻辑 ---
+if close < close[4]
+    buySetup := buySetup + 1
+    sellSetup := 0
+    sellSetup
+else if close > close[4]
+    sellSetup := sellSetup + 1
+    buySetup := 0
+    buySetup
+else
+    buySetup := 0
+    sellSetup := 0
+    sellSetup
+
+// --- 处理 Buy Setup 绘图与完美化 ---
+if buySetup > 0
+    if buySetup == 1
+        clean_labels(buyLabels)
+
+    // 基础文字
+    string txt = str.tostring(buySetup)
+
+    if buySetup == 9
+        // 判定 Perfected Buy: 8或9的Low < 6和7的Low
+        min67 = math.min(low[2], low[3])
+        if low < min67 or low[1] < min67
+            isBuyPerfected := true
+            // 使用换行符，将尖朝上的三角形放在数字 9 的下方
+            txt := '9\n▲'
+            txt
+        lbl = label.new(bar_index, low, text = txt, color = color.new(buyColor, 100), textcolor = buyColor, style = label.style_label_up, size = size.large)
+        array.push(buyLabels, lbl)
+
+        if showOnlyNine
+            for i = 0 to 7 by 1
+                label.delete(array.get(buyLabels, i))
+        array.clear(buyLabels)
+    else if buySetup > 9
+        buySetup := 0
+        buySetup
+    else if buySetup < 9
+        lbl = label.new(bar_index, low, text = txt, color = color.new(buyColor, 100), textcolor = buyColor, style = label.style_label_up, size = size.large)
+        array.push(buyLabels, lbl)
+
+
+// --- 处理 Sell Setup 绘图与完美化 ---
+if sellSetup > 0
+    if sellSetup == 1
+        clean_labels(sellLabels)
+
+    // 基础文字
+    string txt = str.tostring(sellSetup)
+
+    if sellSetup == 9
+        // 判定 Perfected Sell: 8或9的High > 6和7的High
+        max67 = math.max(high[2], high[3])
+        if high > max67 or high[1] > max67
+            isSellPerfected := true
+            // 使用换行符，将尖朝下的三角形放在数字 9 的上方
+            txt := '▼\n9'
+            txt
+        lbl = label.new(bar_index, high, text = txt, color = color.new(sellColor, 100), textcolor = sellColor, style = label.style_label_down, size = size.large)
+        array.push(sellLabels, lbl)
+
+        if showOnlyNine
+            for i = 0 to 7 by 1
+                label.delete(array.get(sellLabels, i))
+        array.clear(sellLabels)
+    else if sellSetup > 9
+        sellSetup := 0
+        sellSetup
+    else if sellSetup < 9
+        lbl = label.new(bar_index, high, text = txt, color = color.new(sellColor, 100), textcolor = sellColor, style = label.style_label_down, size = size.large)
+        array.push(sellLabels, lbl)
+
+
+// --- TDST 逻辑续写 ---
+// 初始化持久化数组
+var array<line> resLinesArray = array.new_line(0)
+var array<line> supLinesArray = array.new_line(0)
+var array<float> resPricesArray = array.new_float(0)
+var array<float> supPricesArray = array.new_float(0)
+
+// --- TDST 综合管理方法 (Method/Function) ---
+// 该函数封装了：1. 开启/关闭检测 2. 数组维护 3. 极值计算 4. 线条延伸 5. 突破判定
+process_tdst_logic(int limit, bool isBuyBus, int setupCount, array<line> linesArr, array<float> pricesArr, color clr) =>
+    // A. 如果 limit 为 0，执行彻底清理并退出
+    if limit == 0
+        if array.size(linesArr) > 0
+            for i = 0 to array.size(linesArr) - 1 by 1
+                line.delete(array.get(linesArr, i))
+            array.clear(linesArr)
+            array.clear(pricesArr)
+    
+    // B. 如果 limit > 0，执行核心逻辑
+    if limit > 0
+        // 1. 生成逻辑：当 Setup 达到 9 时，计算极值并创建新线
+        if setupCount == 9
+            float extremePrice = isBuyBus ? high[0] : low[0]
+            for i = 1 to 8 by 1
+                extremePrice := isBuyBus ? math.max(extremePrice, high[i]) : math.min(extremePrice, low[i])
+            
+            // 创建线段
+            line newLine = line.new(bar_index - 8, extremePrice, bar_index, extremePrice, color = clr, width = 2)
+            array.push(linesArr, newLine)
+            array.push(pricesArr, extremePrice)
+            
+            // 数量溢出处理 (FIFO)
+            if array.size(linesArr) > limit
+                line.delete(array.shift(linesArr))
+                array.shift(pricesArr)
+
+        // 2. 实时更新逻辑：遍历数组处理延伸与突破
+        if array.size(linesArr) > 0
+            for i = array.size(linesArr) - 1 to 0 by 1
+                line  currL = array.get(linesArr, i)
+                float currP = array.get(pricesArr, i)
+                if not na(currL)
+                    // 突破判定：买入阻力线被收盘突破，或卖出支撑线被收盘跌破
+                    bool isBroken = isBuyBus ? (close > currP) : (close < currP)
+                    if isBroken
+                        array.set(linesArr, i, na) // 停止延伸标记
+                    else
+                        line.set_x2(currL, bar_index) // 继续延伸
+
+// --- 尾部调用续写 ---
+
+// 每一根 K 线都调用这个封装好的方法
+// 处理买入序列产生的阻力线 (TDST Resistance)
+process_tdst_logic(maxLineCount, true, buySetup, resLinesArray, resPricesArray, buyColor)
+
+// 处理卖出序列产生的支撑线 (TDST Support)
+process_tdst_logic(maxLineCount, false, sellSetup, supLinesArray, supPricesArray, sellColor)
+
+// --- Countdown 逻辑续写 ---
+// --- 修正后的 Countdown 逻辑续写 ---
+
+// Sequential Countdown 阶段处理函数
+// Sequential 逻辑通常响应趋势和震荡市场
+// --- Sequential Countdown 颜色与变量定义 ---
+// --- Countdown 颜色定义 ---
+color seqBuyColor  = color.rgb(233, 247, 110)  // 深绿色
+color seqSellColor = color.rgb(183, 28, 28)  // 深红色
+
+// --- Countdown 计数器数组 (用数组绕过函数作用域限制) ---
+var array<int> buyCountArr  = array.from(0) // 索引 0 存储计数
+var array<int> sellCountArr = array.from(0)
+
+// --- Countdown 标签管理数组 ---
+var array<label> buyCountLabels  = array.new_label(0)
+var array<label> sellCountLabels = array.new_label(0)
+// --- 在变量定义区修改计数器为数组 ---
+
+
+// --- 补全 Sequential Countdown 逻辑 ---
+process_sequential_countdown(bool isActive, int setupCount, bool isBuyBus, array<int> cArray, array<label> lArray, color clr) =>
+    if isActive
+        int currentCount = array.get(cArray, 0)
+        
+        if isBuyBus
+            // 买入逻辑
+            if setupCount >= 9 and currentCount < 13
+                if close <= low[2]
+                    currentCount := currentCount + 1
+                    array.set(cArray, 0, currentCount) // 更新数组内的全局值
+                    
+                    if currentCount == 13
+                        lbl = label.new(bar_index, low, text = "13\nS", color = color.new(clr, 100), textcolor = clr, style = label.style_label_up, size = size.large)
+                        clean_labels(lArray)
+                        array.set(cArray, 0, 0) // 完成后重置
+                    else
+                        lbl = label.new(bar_index, low, text = str.tostring(currentCount), color = color.new(clr, 100), textcolor = clr, style = label.style_label_up, size = size.normal)
+                        array.push(lArray, lbl)
+            
+            if setupCount == 0
+                array.set(cArray, 0, 0)
+                clean_labels(lArray)
+        else
+            // 卖出逻辑
+            if setupCount >= 9 and currentCount < 13
+                if close >= high[2]
+                    currentCount := currentCount + 1
+                    array.set(cArray, 0, currentCount)
+                    
+                    if currentCount == 13
+                        lbl = label.new(bar_index, high, text = "S\n13", color = color.new(clr, 100), textcolor = clr, style = label.style_label_down, size = size.large)
+                        clean_labels(lArray)
+                        array.set(cArray, 0, 0)
+                    else
+                        lbl = label.new(bar_index, high, text = str.tostring(currentCount), color = color.new(clr, 100), textcolor = clr, style = label.style_label_down, size = size.normal)
+                        array.push(lArray, lbl)
+
+            if setupCount == 0
+                array.set(cArray, 0, 0)
+                clean_labels(lArray)
+
+// --- 尾部调用更新 ---
+process_sequential_countdown(useSequential, buySetup, true, buyCountArr, buyCountLabels, seqBuyColor)
+process_sequential_countdown(useSequential, sellSetup, false, sellCountArr, sellCountLabels, seqSellColor)
+
+// process_sequential_countdown(bool isActive, int setupCount, bool isBuyBus) =>
+//     if isActive
+//         // Pine Script v6 使用 log.info 进行调试输出
+//         log.info("Sequential Countdown 活跃中: 方向=" + (isBuyBus ? "买入" : "卖出") + " Setup计数=" + str.tostring(setupCount))
+//         // 此处未来填充具体 Sequential 逻辑...
+    
+
+// Combo Countdown 阶段处理函数
+// Combo 逻辑在趋势市场中更为敏锐
+process_combo_countdown(bool isActive, int setupCount, bool isBuyBus) =>
+    if isActive
+        log.info("Combo Countdown 活跃中: 方向=" + (isBuyBus ? "买入" : "卖出") + " Setup计数=" + str.tostring(setupCount))
+        // 此处未来填充具体 Combo 逻辑...
+
+
+// --- 执行 Countdown 逻辑 ---
+
+// 获取用户开关配置（请确保输入部分已有这两个变量）
+// bool useSequential = input.bool(true, "执行 Sequential Countdown")
+// bool useCombo      = input.bool(false, "执行 Combo Countdown")
+
+// 当 Setup 正在进行或已完成时，触发 Countdown 检测
+// if buySetup > 0
+//     process_sequential_countdown(true, buySetup, true)
+//     process_combo_countdown(false, buySetup, true)
+
+// if sellSetup > 0
+//     process_sequential_countdown(true, sellSetup, false)
+//     process_combo_countdown(false, sellSetup, false)
