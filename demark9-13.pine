@@ -18,8 +18,12 @@ var bool           buy_done = false
 var bool           sel_done = false
 var array<int>     buy_bi  = array.new<int>(setup_len, 0)
 var array<float>   buy_lo  = array.new<float>(setup_len, 0.0)
+var bool         buy_perf_wait = false   // waiting for deferred buy perfection
+var float        buy_perf_ref  = na      // min(lo6, lo7) reference
 var array<int>     sel_bi  = array.new<int>(setup_len, 0)
 var array<float>   sel_hi  = array.new<float>(setup_len, 0.0)
+var bool         sel_perf_wait = false   // waiting for deferred sell perfection
+var float        sel_perf_ref  = na      // max(hi6, hi7) reference
 
 // 完美化信号触发变量
 bool isBuyPerfected = false
@@ -36,8 +40,13 @@ if buy_cond
         if buy_cnt == setup_len
             buy_done := true
             // 判定 Perfected Buy: 8或9的Low < 6和7的Low
-            min67 = math.min(low[2], low[3])
-            if low < min67 or low[1] < min67
+            lo6   = array.get(buy_lo, setup_len - 4)
+            lo7   = array.get(buy_lo, setup_len - 3)
+            lo8   = array.get(buy_lo, setup_len - 2)
+            lo9   = array.get(buy_lo, setup_len - 1)
+            // min67 = math.min(low[2], low[3])
+            min67 = math.min(lo6, lo7)
+            if lo8 <= min67 or lo9 <= min67
                 isBuyPerfected := true
 
             for i = (show_1_8 ? 0 : setup_len - 1) to setup_len - 1
@@ -56,9 +65,27 @@ if buy_cond
                   textcolor = buy_color,
                   style     = label.style_label_up,
                   size      = font_size)
+            // if not immediately perfect, arm deferred watch
+            if enable_perfect_setup and not isBuyPerfected
+                buy_perf_wait := true
+                buy_perf_ref  := min67
 else
     buy_cnt  := 0
     buy_done := false
+
+// deferred buy perfection: runs every bar while armed
+if buy_perf_wait and low <= buy_perf_ref
+    label.new(
+      x         = bar_index,
+      y         = low,
+      text      = "▲",
+      xloc      = xloc.bar_index,
+      yloc      = yloc.price,
+      color     = color.new(color.white, 100),
+      textcolor = buy_color,
+      style     = label.style_label_up,
+      size      = font_size)
+    buy_perf_wait := false
 
 // ── Sell Setup ───────────────────────────────────────────────────────────────
 sel_cond = use_equal ? close >= close[look_back] : close > close[look_back]
@@ -71,8 +98,13 @@ if sel_cond
         if sel_cnt == setup_len
             sel_done := true
             // 判定 Perfected Sell: 8或9的High > 6和7的High
-            max67 = math.max(high[2], high[3])
-            if high > max67 or high[1] > max67
+            // max67 = math.max(high[2], high[3])
+            hi6   = array.get(sel_hi, setup_len - 4)
+            hi7   = array.get(sel_hi, setup_len - 3)
+            hi8   = array.get(sel_hi, setup_len - 2)
+            hi9   = array.get(sel_hi, setup_len - 1)
+            max67 = math.max(hi6, hi7)
+            if hi8 >= max67 or hi9 >= max67
                 isSellPerfected := true
 
             for i = (show_1_8 ? 0 : setup_len - 1) to setup_len - 1
@@ -91,6 +123,24 @@ if sel_cond
                   textcolor = sell_color,
                   style     = label.style_label_down,
                   size      = font_size)
+            // if not immediately perfect, arm deferred watch
+            if enable_perfect_setup and not isSellPerfected
+                sel_perf_wait := true
+                sel_perf_ref  := max67
 else
     sel_cnt  := 0
     sel_done := false
+
+// deferred sell perfection: runs every bar while armed
+if sel_perf_wait and high >= sel_perf_ref
+    label.new(
+      x         = bar_index,
+      y         = high,
+      text      = "▼",
+      xloc      = xloc.bar_index,
+      yloc      = yloc.price,
+      color     = color.new(color.white, 100),
+      textcolor = sell_color,
+      style     = label.style_label_down,
+      size      = font_size)
+    sel_perf_wait := false
