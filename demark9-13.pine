@@ -1,0 +1,69 @@
+//@version=6
+indicator("TD Sequential – Setup", overlay=true, max_labels_count=500)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+show_1_8  = input.bool(false,         "Show bars 1–8 after setup completes", group="Setup")
+use_equal = input.bool(false,        "Include equal (≤ / ≥) in setup comparison", group="Setup")
+font_size = input.int(20, "Label Font Size", group="Setup")
+buy_color = input.color(color.rgb(237, 165, 166), "Buy Setup Color",                     group="Colors")
+sell_color = input.color(color.rgb(82, 255, 134),   "Sell Setup Color",                    group="Colors")
+
+// ── State ─────────────────────────────────────────────────────────────────────
+var int            buy_cnt  = 0
+var int            sel_cnt  = 0
+var bool           buy_done = false
+var bool           sel_done = false
+var array<int>     buy_bi  = array.new<int>(9, 0)
+var array<float>   buy_lo  = array.new<float>(9, 0.0)
+var array<int>     sel_bi  = array.new<int>(9, 0)
+var array<float>   sel_hi  = array.new<float>(9, 0.0)
+
+// ── Buy Setup ────────────────────────────────────────────────────────────────
+buy_cond = use_equal ? close <= close[4] : close < close[4]
+
+if buy_cond
+    if not buy_done
+        buy_cnt += 1
+        array.set(buy_bi, buy_cnt - 1, bar_index)
+        array.set(buy_lo, buy_cnt - 1, low)
+        if buy_cnt == 9
+            buy_done := true
+            for i = (show_1_8 ? 0 : 8) to 8
+                label.new(
+                  x         = array.get(buy_bi, i),
+                  y         = array.get(buy_lo, i),
+                  text      = str.tostring(i + 1),
+                  xloc      = xloc.bar_index,
+                  yloc      = yloc.price,
+                  color     = color.new(color.white, 100),
+                  textcolor = buy_color,
+                  style     = label.style_label_up,
+                  size      = font_size)
+else
+    buy_cnt  := 0
+    buy_done := false
+
+// ── Sell Setup ───────────────────────────────────────────────────────────────
+sel_cond = use_equal ? close >= close[4] : close > close[4]
+
+if sel_cond
+    if not sel_done
+        sel_cnt += 1
+        array.set(sel_bi, sel_cnt - 1, bar_index)
+        array.set(sel_hi, sel_cnt - 1, high)
+        if sel_cnt == 9
+            sel_done := true
+            for i = (show_1_8 ? 0 : 8) to 8
+                label.new(
+                  x         = array.get(sel_bi, i),
+                  y         = array.get(sel_hi, i),
+                  text      = str.tostring(i + 1),
+                  xloc      = xloc.bar_index,
+                  yloc      = yloc.price,
+                  color     = color.new(color.white, 100),
+                  textcolor = sell_color,
+                  style     = label.style_label_down,
+                  size      = font_size)
+else
+    sel_cnt  := 0
+    sel_done := false
