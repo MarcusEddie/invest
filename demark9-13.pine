@@ -8,6 +8,8 @@ enable_perfect_setup = input.bool(true,        "Enable perfect setup", group="Se
 setup_len = input.int(9, "Setup Length (min 9)", minval=9, group="Setup")
 look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup")
 font_size = input.int(20, "Label Font Size", group="Setup")
+label_bold = input.string("Bold", "Label Style", options=["Bold", "Normal"], group="Setup")
+
 // buy_color = input.color(color.rgb(237, 165, 166), "Buy Setup Color",                     group="Colors")
 // sell_color = input.color(color.rgb(82, 255, 134),   "Sell Setup Color",                    group="Colors")
 buy_color  = input.color(color.rgb(199, 146, 248), "Buy Setup Color",  group="Colors")
@@ -99,16 +101,40 @@ if buy_cond
                     if i == setup_len - 1 and isBuyPerfected
                         label_txt := '9\n▲'
                         label_txt
-                label.new(
-                  x         = array.get(buy_bi, i),
-                  y         = array.get(buy_lo, i) * (1 - offset),
-                  text      = label_txt,
-                  xloc      = xloc.bar_index,
-                  yloc      = yloc.price,
-                  color     = color.new(color.white, 100),
-                  textcolor = buy_color,
-                  style     = label.style_label_up,
-                  size      = font_size)
+                if i == setup_len - 1
+                    if label_bold == "Bold"
+                        label.new(
+                        x         = array.get(buy_bi, i),
+                        y         = array.get(buy_lo, i) * (1 - offset),
+                        text      = label_txt,
+                        xloc      = xloc.bar_index,
+                        yloc      = yloc.price,
+                        color     = color.new(color.white, 100),
+                        textcolor = buy_color,
+                        style     = label.style_label_up,
+                        size      = font_size, text_formatting=text.format_bold)
+                    else
+                        label.new(
+                        x         = array.get(buy_bi, i),
+                        y         = array.get(buy_lo, i) * (1 - offset),
+                        text      = label_txt,
+                        xloc      = xloc.bar_index,
+                        yloc      = yloc.price,
+                        color     = color.new(color.white, 100),
+                        textcolor = buy_color,
+                        style     = label.style_label_up,
+                        size      = font_size, text_formatting=text.format_none)
+                else 
+                    label.new(
+                    x         = array.get(buy_bi, i),
+                    y         = array.get(buy_lo, i) * (1 - offset),
+                    text      = label_txt,
+                    xloc      = xloc.bar_index,
+                    yloc      = yloc.price,
+                    color     = color.new(color.white, 100),
+                    textcolor = buy_color,
+                    style     = label.style_label_up,
+                    size      = font_size, text_formatting=text.format_none)
             // if not immediately perfect, arm deferred watch
             if enable_perfect_setup and not isBuyPerfected
                 buy_perf_wait := true
@@ -199,16 +225,40 @@ if sel_cond
                     if i == setup_len - 1 and isSellPerfected
                         label_txt := '▼\n9'
                         label_txt
-                label.new(
-                  x         = array.get(sel_bi, i),
-                  y         = array.get(sel_hi, i)  * (1 + offset),
-                  text      = label_txt,
-                  xloc      = xloc.bar_index,
-                  yloc      = yloc.price,
-                  color     = color.new(color.white, 100),
-                  textcolor = sell_color,
-                  style     = label.style_label_down,
-                  size      = font_size)
+                if i == setup_len - 1
+                    if label_bold == "Bold"
+                        label.new(
+                        x         = array.get(sel_bi, i),
+                        y         = array.get(sel_hi, i)  * (1 + offset),
+                        text      = label_txt,
+                        xloc      = xloc.bar_index,
+                        yloc      = yloc.price,
+                        color     = color.new(color.white, 100),
+                        textcolor = sell_color,
+                        style     = label.style_label_down,
+                        size      = font_size, text_formatting=text.format_bold)
+                    else
+                        label.new(
+                        x         = array.get(sel_bi, i),
+                        y         = array.get(sel_hi, i)  * (1 + offset),
+                        text      = label_txt,
+                        xloc      = xloc.bar_index,
+                        yloc      = yloc.price,
+                        color     = color.new(color.white, 100),
+                        textcolor = sell_color,
+                        style     = label.style_label_down,
+                        size      = font_size, text_formatting=text.format_none)
+                else 
+                    label.new(
+                    x         = array.get(sel_bi, i),
+                    y         = array.get(sel_hi, i)  * (1 + offset),
+                    text      = label_txt,
+                    xloc      = xloc.bar_index,
+                    yloc      = yloc.price,
+                    color     = color.new(color.white, 100),
+                    textcolor = sell_color,
+                    style     = label.style_label_down,
+                    size      = font_size, text_formatting=text.format_none)
             // if not immediately perfect, arm deferred watch
             if enable_perfect_setup and not isSellPerfected
                 sel_perf_wait := true
