@@ -13,9 +13,11 @@ font_size = input.int(20, "Label Font Size", group="Setup")
 buy_color  = input.color(color.rgb(199, 146, 248), "Buy Setup Color",  group="Colors")
 sell_color = input.color(color.rgb(25,  140, 248), "Sell Setup Color", group="Colors")
 show_tdst      = input.bool(true,              "Show TDST",                  group="TDST")
-tdst_res_color = input.color(color.rgb(199, 146, 248), "TDST Resistance Color", group="TDST")
-tdst_sup_color = input.color(color.rgb(25,  140, 248), "TDST Support Color",    group="TDST")
-tdst_line_weight = input.int(5, "TDST line weight", group="TDST")
+// tdst_res_color = input.color(color.rgb(199, 146, 248), "TDST Resistance Color", group="TDST")
+// tdst_sup_color = input.color(color.rgb(25,  140, 248), "TDST Support Color",    group="TDST")
+tdst_res_color = input.color(color.rgb(4, 4, 4), "TDST Resistance Color", group="TDST")
+tdst_sup_color = input.color(color.rgb(2, 2, 2), "TDST Support Color",    group="TDST")
+tdst_line_weight = input.int(3, "TDST line weight", group="TDST")
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var int            buy_cnt  = 0
@@ -38,8 +40,9 @@ var float        tdst_buy_price = na      // original price of active buy TDST (
 var float        tdst_sel_price = na      // original price of active sell TDST (before offset)
 
 var float offset = 0.01
-// var float tdst_offset = 0.01
-var float tdst_offset = 0
+var float tdst_offset = 0.001
+var tdst_line_style = line.style_solid
+// var float tdst_offset = 0
 // 完美化信号触发变量
 bool isBuyPerfected = false
 bool isSellPerfected = false
@@ -99,7 +102,7 @@ if buy_cond
                 if not na(tdst_buy_line)
                     line.set_x2(tdst_buy_line, res_bar_index)
                     line.set_extend(tdst_buy_line, extend.none)
-                tdst_buy_line := line.new(res_bar_index, final_high, bar_index, final_high, extend=extend.none, color=tdst_res_color, style=line.style_dotted, width=tdst_line_weight)
+                tdst_buy_line := line.new(res_bar_index, final_high, bar_index, final_high, extend=extend.none, color=tdst_res_color, style=tdst_line_style, width=tdst_line_weight)
             
             
 else
@@ -173,7 +176,7 @@ if sel_cond
                 if not na(tdst_sel_line)
                     line.set_x2(tdst_sel_line, support_bar_index)
                     line.set_extend(tdst_sel_line, extend.none)
-                tdst_sel_line := line.new(support_bar_index, final_low, bar_index, final_low, extend=extend.none, color=tdst_sup_color, style=line.style_dotted, width=tdst_line_weight)
+                tdst_sel_line := line.new(support_bar_index, final_low, bar_index, final_low, extend=extend.none, color=tdst_sup_color, style=tdst_line_style, width=tdst_line_weight)
 
 else
     sel_cnt  := 0
@@ -196,9 +199,9 @@ if sel_perf_wait and high >= sel_perf_ref
 // ── Extend active TDST lines to current bar, terminate if close crosses ──────
 if not na(tdst_buy_line)
     line.set_x2(tdst_buy_line, bar_index)
-    if high > tdst_buy_price
+    if close > tdst_buy_price
         tdst_buy_line := na
 if not na(tdst_sel_line)
     line.set_x2(tdst_sel_line, bar_index)
-    if low < tdst_sel_price
+    if close < tdst_sel_price
         tdst_sel_line := na
