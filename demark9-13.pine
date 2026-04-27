@@ -20,6 +20,9 @@ tdst_sup_color = input.color(color.rgb(2, 2, 2), "TDST Support Color",    group=
 tdst_line_weight = input.int(3, "TDST line weight", group="TDST")
 show_risk_level  = input.bool(true, "Show Setup Risk Level", group="Risk Level")
 risk_level_line_weight = input.int(2, "Risk level line weight", group="TDST")
+show_risk_zone      = input.bool(true, "Show Risk Level Zone",  group="Risk Level")
+risk_buy_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Buy Zone Color",  group="Risk Level")
+risk_sel_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Sell Zone Color", group="Risk Level")
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var int            buy_cnt  = 0
@@ -48,6 +51,11 @@ var line         risk_buy_line  = na
 var line         risk_sel_line  = na
 var float        risk_buy_price = na
 var float        risk_sel_price = na
+var line         risk_buy_ref_line = na
+var line         risk_sel_ref_line = na
+var linefill     risk_buy_fill     = na
+var linefill     risk_sel_fill     = na
+
 
 var float offset = 0.01
 var float tdst_offset = 0.002
@@ -126,11 +134,21 @@ if buy_cond
                 if not na(risk_buy_line)
                     line.set_x2(risk_buy_line, bar_index)
                     line.set_extend(risk_buy_line, extend.none)
+                if not na(risk_buy_ref_line)
+                    line.set_x2(risk_buy_ref_line, bar_index)
+                    line.set_extend(risk_buy_ref_line, extend.none)
                 if not na(risk_sel_line)
                     line.set_x2(risk_sel_line, bar_index)
                     line.set_extend(risk_sel_line, extend.none)
                     risk_sel_line := na
+                if not na(risk_sel_ref_line)
+                    line.set_x2(risk_sel_ref_line, bar_index)
+                    line.set_extend(risk_sel_ref_line, extend.none)
+                    risk_sel_ref_line := na
                 risk_buy_line := line.new(bar_index, final_sell_risk_level, bar_index, final_sell_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
+                if show_risk_zone
+                    risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                    risk_buy_fill := linefill.new(risk_buy_ref_line, risk_buy_line, color=risk_buy_zone_color)
             
 else
     buy_cnt  := 0
@@ -216,11 +234,21 @@ if sel_cond
                 if not na(risk_sel_line)
                     line.set_x2(risk_sel_line, bar_index)
                     line.set_extend(risk_sel_line, extend.none)
+                if not na(risk_sel_ref_line)
+                    line.set_x2(risk_sel_ref_line, bar_index)
+                    line.set_extend(risk_sel_ref_line, extend.none)
                 if not na(risk_buy_line)
                     line.set_x2(risk_buy_line, bar_index)
                     line.set_extend(risk_buy_line, extend.none)
                     risk_buy_line := na
+                if not na(risk_buy_ref_line)
+                    line.set_x2(risk_buy_ref_line, bar_index)
+                    line.set_extend(risk_buy_ref_line, extend.none)
+                    risk_buy_ref_line := na
                 risk_sel_line := line.new(bar_index, final_buy_risk_level, bar_index, final_buy_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
+                if show_risk_zone
+                    risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                    risk_sel_fill := linefill.new(risk_sel_line, risk_sel_ref_line, color=risk_sel_zone_color)
 
 else
     sel_cnt  := 0
@@ -254,11 +282,17 @@ if not na(tdst_sel_line)
 
 if not na(risk_buy_line)
     line.set_x2(risk_buy_line, bar_index)
+    if not na(risk_buy_ref_line)
+        line.set_x2(risk_buy_ref_line, bar_index)
     if close < risk_buy_price
         line.set_style(risk_buy_line, tdst_line_break_style)
         risk_buy_line := na
+        risk_buy_ref_line := na
 if not na(risk_sel_line)
     line.set_x2(risk_sel_line, bar_index)
+    if not na(risk_sel_ref_line)
+        line.set_x2(risk_sel_ref_line, bar_index)
     if close > risk_sel_price
         line.set_style(risk_sel_line, tdst_line_break_style)
         risk_sel_line := na
+        risk_sel_ref_line := na
