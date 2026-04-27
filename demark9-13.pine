@@ -18,6 +18,8 @@ show_tdst      = input.bool(true,              "Show TDST",                  gro
 tdst_res_color = input.color(color.rgb(4, 4, 4), "TDST Resistance Color", group="TDST")
 tdst_sup_color = input.color(color.rgb(2, 2, 2), "TDST Support Color",    group="TDST")
 tdst_line_weight = input.int(3, "TDST line weight", group="TDST")
+show_risk_level  = input.bool(true, "Show Setup Risk Level", group="Risk Level")
+risk_level_line_weight = input.int(2, "Risk level line weight", group="TDST")
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var int            buy_cnt  = 0
@@ -27,20 +29,28 @@ var bool           sel_done = false
 var array<int>     buy_bi  = array.new<int>(setup_len, 0)
 var array<float>   buy_lo  = array.new<float>(setup_len, 0.0)
 var array<float>   buy_hi  = array.new<float>(setup_len, 0.0) // Added for TDST
+var array<float>   buy_tl  = array.new<float>(setup_len, 0.0) // true_low for risk level
+
 var bool         buy_perf_wait = false   // waiting for deferred buy perfection
 var float        buy_perf_ref  = na      // min(lo6, lo7) reference
 var array<int>     sel_bi  = array.new<int>(setup_len, 0)
 var array<float>   sel_hi  = array.new<float>(setup_len, 0.0)
 var array<float>   sel_lo  = array.new<float>(setup_len, 0.0) // Added for TDST
+var array<float>   sel_th  = array.new<float>(setup_len, 0.0) // true_high for risk level
+
 var bool         sel_perf_wait = false   // waiting for deferred sell perfection
 var float        sel_perf_ref  = na      // max(hi6, hi7) reference
 var line         tdst_buy_line = na      // TDST resistance line (from buy setup)
 var line         tdst_sel_line = na      // TDST support line (from sell setup)
 var float        tdst_buy_price = na      // original price of active buy TDST (before offset)
 var float        tdst_sel_price = na      // original price of active sell TDST (before offset)
+var line         risk_buy_line  = na
+var line         risk_sel_line  = na
+var float        risk_buy_price = na
+var float        risk_sel_price = na
 
 var float offset = 0.01
-var float tdst_offset = 0.001
+var float tdst_offset = 0.002
 var tdst_line_style = line.style_dashed
 var tdst_line_break_style = line.style_solid
 // var float tdst_offset = 0
@@ -61,6 +71,7 @@ if buy_cond
         array.set(buy_bi, buy_cnt - 1, bar_index)
         array.set(buy_lo, buy_cnt - 1, low)
         array.set(buy_hi, buy_cnt - 1, true_high)
+        array.set(buy_tl, buy_cnt - 1, true_low)
 
         if buy_cnt == setup_len
             buy_done := true
@@ -105,6 +116,21 @@ if buy_cond
                     line.set_extend(tdst_buy_line, extend.none)
                 tdst_buy_line := line.new(res_bar_index, final_high, bar_index, final_high, extend=extend.none, color=tdst_res_color, style=tdst_line_style, width=tdst_line_weight)
             
+            if show_risk_level
+                float min_tl  = array.min(buy_tl)
+                int   ext_idx = array.indexof(buy_tl, min_tl)
+                float ext_th  = array.get(buy_hi, ext_idx)
+                float rl      = min_tl - (ext_th - min_tl)
+                float final_sell_risk_level = rl * (1 - tdst_offset)
+                risk_buy_price := rl
+                if not na(risk_buy_line)
+                    line.set_x2(risk_buy_line, bar_index)
+                    line.set_extend(risk_buy_line, extend.none)
+                if not na(risk_sel_line)
+                    line.set_x2(risk_sel_line, bar_index)
+                    line.set_extend(risk_sel_line, extend.none)
+                    risk_sel_line := na
+                risk_buy_line := line.new(bar_index, final_sell_risk_level, bar_index, final_sell_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
             
 else
     buy_cnt  := 0
@@ -135,6 +161,7 @@ if sel_cond
         array.set(sel_bi, sel_cnt - 1, bar_index)
         array.set(sel_hi, sel_cnt - 1, high)
         array.set(sel_lo, sel_cnt - 1, true_low)
+        array.set(sel_th, sel_cnt - 1, true_high)
 
         if sel_cnt == setup_len
             sel_done := true
@@ -178,6 +205,22 @@ if sel_cond
                     line.set_x2(tdst_sel_line, support_bar_index)
                     line.set_extend(tdst_sel_line, extend.none)
                 tdst_sel_line := line.new(support_bar_index, final_low, bar_index, final_low, extend=extend.none, color=tdst_sup_color, style=tdst_line_style, width=tdst_line_weight)
+            
+            if show_risk_level
+                float max_th  = array.max(sel_th)
+                int   ext_idx = array.indexof(sel_th, max_th)
+                float ext_tl  = array.get(sel_lo, ext_idx)
+                float rl      = max_th + (max_th - ext_tl)
+                float final_buy_risk_level = rl * (1 + tdst_offset)
+                risk_sel_price := rl
+                if not na(risk_sel_line)
+                    line.set_x2(risk_sel_line, bar_index)
+                    line.set_extend(risk_sel_line, extend.none)
+                if not na(risk_buy_line)
+                    line.set_x2(risk_buy_line, bar_index)
+                    line.set_extend(risk_buy_line, extend.none)
+                    risk_buy_line := na
+                risk_sel_line := line.new(bar_index, final_buy_risk_level, bar_index, final_buy_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
 
 else
     sel_cnt  := 0
@@ -208,3 +251,14 @@ if not na(tdst_sel_line)
     if close < tdst_sel_price
         line.set_style(tdst_sel_line, tdst_line_break_style)
         tdst_sel_line := na
+
+if not na(risk_buy_line)
+    line.set_x2(risk_buy_line, bar_index)
+    if close < risk_buy_price
+        line.set_style(risk_buy_line, tdst_line_break_style)
+        risk_buy_line := na
+if not na(risk_sel_line)
+    line.set_x2(risk_sel_line, bar_index)
+    if close > risk_sel_price
+        line.set_style(risk_sel_line, tdst_line_break_style)
+        risk_sel_line := na
