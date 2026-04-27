@@ -41,7 +41,8 @@ var float        tdst_sel_price = na      // original price of active sell TDST 
 
 var float offset = 0.01
 var float tdst_offset = 0.001
-var tdst_line_style = line.style_solid
+var tdst_line_style = line.style_dashed
+var tdst_line_break_style = line.style_solid
 // var float tdst_offset = 0
 // 完美化信号触发变量
 bool isBuyPerfected = false
@@ -200,8 +201,10 @@ if sel_perf_wait and high >= sel_perf_ref
 if not na(tdst_buy_line)
     line.set_x2(tdst_buy_line, bar_index)
     if close > tdst_buy_price
+        line.set_style(tdst_buy_line, tdst_line_break_style)
         tdst_buy_line := na
 if not na(tdst_sel_line)
     line.set_x2(tdst_sel_line, bar_index)
     if close < tdst_sel_price
+        line.set_style(tdst_sel_line, tdst_line_break_style)
         tdst_sel_line := na
