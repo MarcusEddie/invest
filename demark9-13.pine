@@ -70,9 +70,20 @@ var line         risk_buy_ref_line = na
 var line         risk_sel_ref_line = na
 var linefill     risk_buy_fill     = na
 var linefill     risk_sel_fill     = na
+// ── Buy Countdown State ───────────────────────────────────────────────────────
+var bool  cd_buy_active     = false
+var int   cd_buy_cnt        = 0
+var float cd_buy_bar8_close = na
+var array<int>   cd_buy_bi  = array.new<int>(13, 0)
+var array<float> cd_buy_lo  = array.new<float>(13, 0.0)
+// ── Sell Countdown State ──────────────────────────────────────────────────────
+var bool  cd_sel_active     = false
+var int   cd_sel_cnt        = 0
+var float cd_sel_bar8_close = na
+var array<int>   cd_sel_bi  = array.new<int>(13, 0)
+var array<float> cd_sel_hi  = array.new<float>(13, 0.0)
 
-
-var float offset = 0.05
+var float offset = 0.01
 var float tdst_offset = 0.002
 var tdst_line_style = line.style_dashed
 var tdst_line_break_style = line.style_solid
@@ -98,6 +109,11 @@ if buy_cond
 
         if buy_cnt == setup_len
             buy_done := true
+            cd_buy_active     := true
+            cd_buy_cnt        := 0
+            cd_buy_bar8_close := na
+            cd_sel_active     := false
+            cd_sel_cnt        := 0
             // 判定 Perfected Buy: 8或9的Low < 6和7的Low
             lo6   = array.get(buy_lo, setup_len - 4)
             lo7   = array.get(buy_lo, setup_len - 3)
@@ -201,6 +217,11 @@ if sel_cond
 
         if sel_cnt == setup_len
             sel_done := true
+            cd_buy_active := false
+            cd_buy_cnt    := 0
+            cd_sel_active     := true
+            cd_sel_cnt        := 0
+            cd_sel_bar8_close := na
             // 判定 Perfected Sell: 8或9的High > 6和7的High
             // max67 = math.max(high[2], high[3])
             hi6   = array.get(sel_hi, setup_len - 4)
@@ -322,4 +343,56 @@ if not na(risk_sel_line)
         line.set_style(risk_sel_line, tdst_line_break_style)
         risk_sel_line := na
         risk_sel_ref_line := na
+
+
+// ── Buy Countdown ─────────────────────────────────────────────────────────────
+// Rules:
+//   1. Arms after Buy Setup 9 completes; Bar 9 can simultaneously be CD Bar 1
+//      if close <= low[2], otherwise waits for the first qualifying bar.
+//   2. Counts bars where close <= low[cd_look_back] (cd_look_back default = 2).
+//   3. At Bar 13: completion requires low[13] <= close[8] (condition 1).
+//      Condition 2 (close <= low[2]) is implicit — only qualifying bars are counted.
+//   4. Cancelled if a Sell Setup 9 completes while active.
+if enable_sequential_countdown and cd_buy_active
+    bool cd_cond = cd_compare == "With Equals" ? close <= low[cd_look_back] : close < low[cd_look_back]
+    if cd_cond and cd_buy_cnt < 13
+        cd_buy_cnt += 1
+        array.set(cd_buy_bi, cd_buy_cnt - 1, bar_index)
+        array.set(cd_buy_lo, cd_buy_cnt - 1, low)
+        if cd_buy_cnt == 8
+            cd_buy_bar8_close := close
+        if cd_buy_cnt == 13
+            // Condition 1: low of Bar 13 <= close of Bar 8
+            if not na(cd_buy_bar8_close) and low <= cd_buy_bar8_close
+                string countdown_label = str.tostring(cd_buy_cnt)
+                label.new(x = bar_index, y = low * (1 - offset), text = countdown_label, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
+            cd_buy_active := false
+        else if show_all_bars == "All"
+            label.new(x = bar_index, y = low * (1 - offset), text = str.tostring(cd_buy_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
+
+
+// ── Sell Countdown ────────────────────────────────────────────────────────────
+// Rules:
+//   1. Arms after Sell Setup 9 completes; Bar 9 can simultaneously be CD Bar 1
+//      if close >= high[2], otherwise waits for the first qualifying bar.
+//   2. Counts bars where close >= high[cd_look_back] (cd_look_back default = 2).
+//   3. At Bar 13: completion requires high[13] >= close[8] (condition 1).
+//      Condition 2 (close >= high[2]) is implicit — only qualifying bars are counted.
+//   4. Cancelled if a Buy Setup 9 completes while active.
+if enable_sequential_countdown and cd_sel_active
+    bool cd_sel_cond = cd_compare == "With Equals" ? close >= high[cd_look_back] : close > high[cd_look_back]
+    if cd_sel_cond and cd_sel_cnt < 13
+        cd_sel_cnt += 1
+        array.set(cd_sel_bi, cd_sel_cnt - 1, bar_index)
+        array.set(cd_sel_hi, cd_sel_cnt - 1, high)
+        if cd_sel_cnt == 8
+            cd_sel_bar8_close := close
+        if cd_sel_cnt == 13
+            // Condition 1: high of Bar 13 >= close of Bar 8
+            if not na(cd_sel_bar8_close) and high >= cd_sel_bar8_close
+                string countdown_label = str.tostring(cd_sel_cnt)
+                label.new(x = bar_index, y = high * (1 + offset), text = countdown_label, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_bold)
+            cd_sel_active := false
+        else if show_all_bars == "All"
+            label.new(x = bar_index, y = high * (1 + offset), text = str.tostring(cd_sel_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_none)
 
