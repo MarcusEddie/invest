@@ -2,32 +2,42 @@
 indicator("TD Sequential – Setup", overlay=true, max_labels_count=500, max_lines_count=500, max_bars_back=5000)
 
 // ── Inputs ────────────────────────────────────────────────────────────────────
-enable_setup  = input.bool(false,         "Show setup", group="Setup")
-show_1_8  = input.bool(false,         "Show bars 1–8 after setup completes", group="Setup")
-use_equal = input.bool(false,        "Include equal (≤ / ≥) in setup comparison", group="Setup")
-enable_perfect_setup = input.bool(true,        "Enable perfect setup", group="Setup")
-setup_len = input.int(9, "Setup Length (min 9)", minval=9, group="Setup")
-look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup")
-font_size = input.int(20, "Label Font Size", group="Setup")
-label_bold = input.string("Bold", "Label Style", options=["Bold", "Normal"], group="Setup")
+enable_setup  = input.bool(false,         "Show setup", group="Setup", display = display.none)
+show_all_bars = input.string("Active only", "Show all counts", options=["Active only", "All"], group="Setup", display = display.none)//  setup和countdown公用这个
 
-// buy_color = input.color(color.rgb(237, 165, 166), "Buy Setup Color",                     group="Colors")
-// sell_color = input.color(color.rgb(82, 255, 134),   "Sell Setup Color",                    group="Colors")
-buy_color  = input.color(color.rgb(199, 146, 248), "Buy Setup Color",  group="Colors")
-sell_color = input.color(color.rgb(25,  140, 248), "Sell Setup Color", group="Colors")
-show_tdst      = input.bool(true,              "Show TDST",                  group="TDST")
-// tdst_res_color = input.color(color.rgb(199, 146, 248), "TDST Resistance Color", group="TDST")
-// tdst_sup_color = input.color(color.rgb(25,  140, 248), "TDST Support Color",    group="TDST")
-tdst_res_color = input.color(color.rgb(4, 4, 4), "TDST Resistance Color", group="TDST")
-tdst_sup_color = input.color(color.rgb(2, 2, 2), "TDST Support Color",    group="TDST")
-tdst_line_weight = input.int(3, "TDST line weight", group="TDST")
-show_risk_level  = input.bool(true, "Show Setup Risk Level", group="Risk Level")
-risk_level_line_weight = input.int(2, "Risk level line weight", group="TDST")
-show_risk_zone      = input.bool(true, "Show Risk Level Zone",  group="Risk Level")
-risk_buy_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Buy Zone Color",  group="Risk Level")
-risk_sel_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Sell Zone Color", group="Risk Level")
+use_equal = input.bool(false,        "Include equal (≤ / ≥) in setup comparison", group="Setup", display = display.none)
+enable_perfect_setup = input.bool(true,        "Enable perfect setup", group="Setup", display = display.none)
+setup_len = input.int(9, "Setup Length (min 9)", minval=9, group="Setup", display = display.none)
+look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup", display = display.none)
+font_size = input.int(20, "Label Font Size", group="Setup", display = display.none)
+label_bold = input.string("Bold", "Label Style", options=["Bold", "Normal"], group="Setup", display = display.none)
 
-enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Setup")
+// buy_color = input.color(color.rgb(237, 165, 166), "Buy Setup Color",                     group="Colors", display = display.none)
+// sell_color = input.color(color.rgb(82, 255, 134),   "Sell Setup Color",                    group="Colors", display = display.none)
+buy_color  = input.color(color.rgb(199, 146, 248), "Buy Setup Color",  group="Colors", display = display.none)
+sell_color = input.color(color.rgb(25,  140, 248), "Sell Setup Color", group="Colors", display = display.none)
+show_tdst      = input.bool(true,              "Show TDST",                  group="TDST", display = display.none)
+// tdst_res_color = input.color(color.rgb(199, 146, 248), "TDST Resistance Color", group="TDST", display = display.none)
+// tdst_sup_color = input.color(color.rgb(25,  140, 248), "TDST Support Color",    group="TDST", display = display.none)
+tdst_res_color = input.color(color.rgb(4, 4, 4), "TDST Resistance Color", group="TDST", display = display.none)
+tdst_sup_color = input.color(color.rgb(2, 2, 2), "TDST Support Color",    group="TDST", display = display.none)
+tdst_line_weight = input.int(3, "TDST line weight", group="TDST", display = display.none)
+show_risk_level  = input.bool(true, "Show Setup Risk Level", group="Risk Level", display = display.none)
+risk_level_line_weight = input.int(2, "Risk level line weight", group="TDST", display = display.none)
+show_risk_zone      = input.bool(true, "Show Risk Level Zone",  group="Risk Level", display = display.none)
+risk_buy_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Buy Zone Color",  group="Risk Level", display = display.none)
+risk_sel_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Sell Zone Color", group="Risk Level", display = display.none)
+
+enable_sequential_countdown  = input.bool(false,                      "Enable Sequential Countdown",       group="Countdown", display = display.none)
+cd_buy_color      = input.color(color.rgb(199, 146, 248),  "Buy Countdown Color",               group="Countdown", display = display.none)
+cd_sell_color     = input.color(color.rgb(25,  140, 248),  "Sell Countdown Color",              group="Countdown", display = display.none)
+cd_bars           = input.int(13,        "Bars to Countdown",             minval=1, group="Countdown", display = display.none)
+cd_look_back      = input.int(2,         "Bars to Look Back",             minval=1, group="Countdown", display = display.none)
+cd_comp_val       = input.string("Close",       "Countdown Comparison Value",    options=["Close", "Low/High"],                          group="Countdown", display = display.none)
+cd_term_val       = input.string("Open or Close",    "Termination Count Price Value", options=["Open or Close", "Close", "Low/High"],          group="Countdown", display = display.none)
+cd_compare        = input.string("With Equals", "Countdown Compare",            options=["With Equals", "Without Equals"],               group="Countdown", display = display.none)
+
+enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Setup", display = display.none)
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var int            buy_cnt  = 0
@@ -98,20 +108,8 @@ if buy_cond
             if lo8 <= min67 or lo9 <= min67
                 isBuyPerfected := true
 
-            for i = (show_1_8 ? 0 : setup_len - 1) to setup_len - 1
-                
-                
-                // if enable_perfect_setup and enable_setup
-                //     if i == setup_len - 1 and isBuyPerfected
-                //         label_txt := '9\n▲'
-                //         label_txt
-                // if enable_setup
-                //     if enable_perfect_setup
-                //         if i == setup_len - 1 and isBuyPerfected
-                //             label_txt := '9\n▲'
-                //             label_txt
-
-                
+            
+            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1
                 if i == setup_len - 1
                     // label_txt = 9 now
                     string label_txt = na
@@ -122,14 +120,14 @@ if buy_cond
                         else
                             label_txt := str.tostring(i + 1)
                             label_txt
-                    // else if enable_setup and (not enable_perfect_setup)
-                    //     // use label text = 9
+                    else if enable_setup and (not enable_perfect_setup)
+                        label_txt := str.tostring(i + 1)
+                        label_txt
                     else if (not enable_setup) and enable_perfect_setup
                         if isBuyPerfected
                             label_txt := '▲'
                             label_txt
                     // else if (not enable_setup) and (not enable_perfect_setup)
-                    
                     if not na(label_txt)
                         if label_bold == "Bold"
                             label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_bold)
@@ -213,13 +211,7 @@ if sel_cond
             if hi8 >= max67 or hi9 >= max67
                 isSellPerfected := true
             
-            for i = (show_1_8 ? 0 : setup_len - 1) to setup_len - 1
-                // string label_txt = str.tostring(i + 1)
-                // if enable_perfect_setup
-                //     if i == setup_len - 1 and isSellPerfected
-                //         label_txt := '▼\n9'
-                //         label_txt
-
+            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1
                 if i == setup_len - 1
                     // label_txt = 9 now
                     string label_txt = na
@@ -230,8 +222,9 @@ if sel_cond
                         else
                             label_txt := str.tostring(i + 1)
                             label_txt
-                    // else if enable_setup and (not enable_perfect_setup)
-                    //     // use label text = 9
+                    else if enable_setup and (not enable_perfect_setup)
+                        label_txt := str.tostring(i + 1)
+                        label_txt
                     else if (not enable_setup) and enable_perfect_setup
                         if isSellPerfected
                             label_txt := '▼'
@@ -286,7 +279,8 @@ if sel_cond
                 if show_risk_zone
                     risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
                     risk_sel_fill := linefill.new(risk_sel_line, risk_sel_ref_line, color=risk_sel_zone_color)
-
+            
+                
 else
     sel_cnt  := 0
     sel_done := false
@@ -303,11 +297,14 @@ if not na(tdst_buy_line)
     if close > tdst_buy_price
         line.set_style(tdst_buy_line, tdst_line_break_style)
         tdst_buy_line := na
+        
+        
 if not na(tdst_sel_line)
     line.set_x2(tdst_sel_line, bar_index)
     if close < tdst_sel_price
         line.set_style(tdst_sel_line, tdst_line_break_style)
         tdst_sel_line := na
+        
 
 if not na(risk_buy_line)
     line.set_x2(risk_buy_line, bar_index)
@@ -325,3 +322,4 @@ if not na(risk_sel_line)
         line.set_style(risk_sel_line, tdst_line_break_style)
         risk_sel_line := na
         risk_sel_ref_line := na
+
