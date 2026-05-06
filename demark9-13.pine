@@ -2,45 +2,56 @@
 indicator("TD-Claude", overlay=true, max_labels_count=500, max_lines_count=500, max_bars_back=5000)
 
 // ── Inputs ────────────────────────────────────────────────────────────────────
-enable_setup  = input.bool(false,         "Show setup", group="Setup", display = display.none)
-show_all_bars = input.string("Active only", "Show all counts", options=["Active only", "All"], group="Setup", display = display.none)//  setup和countdown公用这个
+enable_setup  = input.bool(false,         "Setup", inline="setup_row", display = display.none)
+setup_buy_color     = input.color(color.rgb(199, 146, 248), "Buy", inline="setup_row", display = display.none)
+setup_sell_color    = input.color(color.rgb(25,  140, 248), "Sell", inline="setup_row", display = display.none)
 
-use_equal = input.bool(false,        "Include equal (≤ / ≥) in setup comparison", group="Setup", display = display.none)
-enable_perfect_setup = input.bool(true,        "Enable perfect setup", group="Setup", display = display.none)
+enable_tdst      = input.bool(false,              "TDST", inline = "tdst_row", display = display.none)
+tdst_res_color = input.color(color.rgb(4, 4, 4), "Res", inline = "tdst_row", display = display.none)
+tdst_sup_color = input.color(color.rgb(2, 2, 2), "Sup", inline = "tdst_row", display = display.none)
+
+enable_sequential_countdown  = input.bool(false,                      "Sequential Countdown",       inline = "Sequential_countdown_row", display = display.none)
+seq_cd_buy_color      = input.color(color.rgb(199, 146, 248),  "Buy",  inline = "Sequential_countdown_row", display = display.none)
+seq_cd_sell_color     = input.color(color.rgb(25,  140, 248),  "Sell", inline = "Sequential_countdown_row", display = display.none)
+
+enable_combo_countdown  = input.bool(false,                      "Combo Countdown",       inline = "Combo_countdown_row", display = display.none)
+combo_cd_buy_color      = input.color(color.rgb(199, 146, 248),  "Buy",  inline = "Combo_countdown_row", display = display.none)
+combo_cd_sell_color     = input.color(color.rgb(25,  140, 248),  "Sell", inline = "Combo_countdown_row", display = display.none)
+
+font_size = input.int(20, "Label Font Size", display = display.none)
+show_all_bars = input.string("Active only", "Show all counts", options=["Active only", "All"], display = display.none)//  setup和countdown公用这个
+
+
 setup_len = input.int(9, "Setup Length (min 9)", minval=9, group="Setup", display = display.none)
-look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup", display = display.none)
-font_size = input.int(20, "Label Font Size", group="Setup", display = display.none)
+setup_look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup", display = display.none)
+setup_use_equal = input.string("Without equal", "Setup comparison", options=["Without equal", "With equal"], group="Setup", display = display.none)
 label_bold = input.string("Bold", "Label Style", options=["Bold", "Normal"], group="Setup", display = display.none)
+enable_perfect_setup = input.bool(false,        "Enable perfect setup", group="Setup", display = display.none)
+enable_risk_level  = input.bool(false, "Enable Risk Level", group="Setup", display = display.none)
+enable_risk_zone      = input.bool(false, "Enable Risk Level Zone",  group="Setup", display = display.none)
 
-// buy_color = input.color(color.rgb(237, 165, 166), "Buy Setup Color",                     group="Colors", display = display.none)
-// sell_color = input.color(color.rgb(82, 255, 134),   "Sell Setup Color",                    group="Colors", display = display.none)
-buy_color  = input.color(color.rgb(199, 146, 248), "Buy Setup Color",  group="Colors", display = display.none)
-sell_color = input.color(color.rgb(25,  140, 248), "Sell Setup Color", group="Colors", display = display.none)
-show_tdst      = input.bool(true,              "Show TDST",                  group="TDST", display = display.none)
-// tdst_res_color = input.color(color.rgb(199, 146, 248), "TDST Resistance Color", group="TDST", display = display.none)
-// tdst_sup_color = input.color(color.rgb(25,  140, 248), "TDST Support Color",    group="TDST", display = display.none)
-tdst_res_color = input.color(color.rgb(4, 4, 4), "TDST Resistance Color", group="TDST", display = display.none)
-tdst_sup_color = input.color(color.rgb(2, 2, 2), "TDST Support Color",    group="TDST", display = display.none)
 tdst_line_weight = input.int(3, "TDST line weight", group="TDST", display = display.none)
-show_risk_level  = input.bool(true, "Show Setup Risk Level", group="Risk Level", display = display.none)
 risk_level_line_weight = input.int(2, "Risk level line weight", group="TDST", display = display.none)
-show_risk_zone      = input.bool(true, "Show Risk Level Zone",  group="Risk Level", display = display.none)
 risk_buy_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Buy Zone Color",  group="Risk Level", display = display.none)
 risk_sel_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Sell Zone Color", group="Risk Level", display = display.none)
 
-enable_sequential_countdown  = input.bool(false,                      "Enable Sequential Countdown",       group="Countdown", display = display.none)
-cd_buy_color      = input.color(color.rgb(199, 146, 248),  "Buy Countdown Color",               group="Countdown", display = display.none)
-cd_sell_color     = input.color(color.rgb(25,  140, 248),  "Sell Countdown Color",              group="Countdown", display = display.none)
-cd_bars           = input.int(13,        "Bars to Countdown",             minval=1, group="Countdown", display = display.none)
-cd_look_back      = input.int(2,         "Bars to Look Back",             minval=1, group="Countdown", display = display.none)
-cd_comp_val       = input.string("Close",       "Countdown Comparison Value",    options=["Close", "Low/High"],                          group="Countdown", display = display.none)
-cd_term_val       = input.string("Open or Close",    "Termination Count Price Value", options=["Open or Close", "Close", "Low/High"],          group="Countdown", display = display.none)
-cd_compare        = input.string("With Equals", "Countdown Compare",            options=["With Equals", "Without Equals"],               group="Countdown", display = display.none)
+cd_bars           = input.int(13,        "Bars to Countdown",             minval=1, group="Countdown (shared)", display = display.none)
+cd_look_back      = input.int(2,         "Bars to Look Back",             minval=1, group="Countdown (shared)", display = display.none)
+cd_comp_val       = input.string("Close",       "Countdown Comparison Value",    options=["Close", "Low/High"],                          group="Countdown (shared)", display = display.none)
+cd_term_val       = input.string("Open or Close",    "Termination Count Price Value", options=["Open or Close", "Close", "Low/High"],          group="Countdown (shared)", display = display.none)
+cd_compare        = input.string("With Equals", "Countdown Compare",            options=["With Equals", "Without Equals"],               group="Countdown (shared)", display = display.none)
 
+enable_seq_intersection = input.bool(false,                      "Enable Intersection",       group="Sequential Countdown", display = display.none)
 enable_13_vs_8 = input.bool(false,                      "Last vs 8 qualifier",       group="Sequential Countdown", display = display.none)
 enable_8_vs_5 = input.bool(false,                      "8 vs 5 qualifier",       group="Sequential Countdown", display = display.none)
+enable_seq_risk_level = input.bool(false,                      "Enable Risk Level",       group="Sequential Countdown", display = display.none)
+enable_seq_risk_zone = input.bool(false,                      "Enable Risk Level Zone",       group="Sequential Countdown", display = display.none)
 
-enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Setup", display = display.none)
+combo_version = input.string("Standard", "Combo version", options=["Standard", "Aggressive", "Conservative"], group="Combo Countdown",display = display.none)
+enable_combo_risk_level = input.bool(false,                      "Enable Risk Level",       group="Combo Countdown", display = display.none)
+enable_combo_risk_zone = input.bool(false,                      "Enable Risk Level Zone",       group="Combo Countdown", display = display.none)
+
+enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Breakout qualifiers", display = display.none)
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var label[] labelQueue = array.new_label(500, na)
@@ -79,11 +90,13 @@ var linefill     risk_sel_fill     = na
 // ── Countdown State (parallel arrays; one entry per active countdown) ─────────
 // Each Setup 9 pushes a new entry; countdowns run independently in parallel.
 var array<int>   cd_buy_cnts  = array.new<int>()    // current count per active buy countdown
-var array<float> cd_buy_b8cls = array.new<float>()  // bar-8 close per active buy countdown
 var array<int>   cd_sel_cnts  = array.new<int>()    // current count per active sell countdown
+var array<float> cd_buy_b8cls = array.new<float>()  // bar-8 close per active buy countdown
 var array<float> cd_sel_b8cls = array.new<float>()  // bar-8 close per active sell countdown
 var array<int>   cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
 var array<int>   cd_sel_ts    = array.new<int>()     // bar-9 start timestamp per active sell countdown
+var array<float> cd_buy_b5cls = array.new<float>()  // bar-5 close per active buy countdown (8vs5 qualifier)
+var array<float> cd_sel_b5cls = array.new<float>()  // bar-5 close per active sell countdown (8vs5 qualifier)
 
 
 var float offset = 0.01
@@ -101,7 +114,7 @@ true_high = math.max(high, nz(close[1], high))
 true_low  = math.min(low,  nz(close[1], low))
 
 // ── Buy Setup ────────────────────────────────────────────────────────────────
-buy_cond = use_equal ? close <= close[look_back] : close < close[look_back]
+buy_cond = setup_use_equal == "With equal" ? close <= close[setup_look_back] : close < close[setup_look_back]
 
 if buy_cond
     if not buy_done
@@ -115,11 +128,8 @@ if buy_cond
             buy_done := true
             array.push(cd_buy_cnts,  0)
             array.push(cd_buy_b8cls, na)
+            array.push(cd_buy_b5cls, na)
             array.push(cd_buy_ts,    time)
-            // array.clear(cd_sel_cnts)
-            // array.clear(cd_sel_b8cls)
-            // array.clear(cd_sel_ts)
-
             // 判定 Perfected Buy: 8或9的Low < 6和7的Low
             lo6   = array.get(buy_lo, setup_len - 4)
             lo7   = array.get(buy_lo, setup_len - 3)
@@ -149,18 +159,17 @@ if buy_cond
                         if isBuyPerfected
                             label_txt := '▲'
                             label_txt
-                    // else if (not enable_setup) and (not enable_perfect_setup)
                     if not na(label_txt)
                         if label_bold == "Bold"
-                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_bold)
+                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_bold)
                              
                         else
-                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
                              
                 else 
                     if enable_setup
                         string label_txt = str.tostring(i + 1)
-                        buy_label_bar_non_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                        buy_label_bar_non_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
                          
                         
             // if not immediately perfect, arm deferred watch
@@ -168,7 +177,7 @@ if buy_cond
                 buy_perf_wait := true
                 buy_perf_ref  := min67
             // TDST resistance: highest high of this buy setup
-            if show_tdst
+            if enable_tdst
                 float setup_max_hi = array.max(buy_hi)
                 tdst_buy_price := setup_max_hi
                 float final_high = setup_max_hi * (1 + tdst_offset)
@@ -178,7 +187,7 @@ if buy_cond
                     line.set_extend(tdst_buy_line, extend.none)
                 tdst_buy_line := line.new(res_bar_index, final_high, bar_index, final_high, extend=extend.none, color=tdst_res_color, style=tdst_line_style, width=tdst_line_weight)
             
-            if show_risk_level
+            if enable_risk_level
                 float min_tl  = array.min(buy_tl)
                 int   ext_idx = array.indexof(buy_tl, min_tl)
                 float ext_th  = array.get(buy_hi, ext_idx)
@@ -200,7 +209,7 @@ if buy_cond
                     line.set_extend(risk_sel_ref_line, extend.none)
                     risk_sel_ref_line := na
                 risk_buy_line := line.new(bar_index, final_sell_risk_level, bar_index, final_sell_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
-                if show_risk_zone
+                if enable_risk_zone
                     risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
                     risk_buy_fill := linefill.new(risk_buy_ref_line, risk_buy_line, color=risk_buy_zone_color)
             
@@ -212,12 +221,11 @@ else
 // deferred buy perfection: runs every bar while armed
 if buy_perf_wait and low <= buy_perf_ref
     if enable_perfect_setup
-        buy_label_perfect = label.new(x = bar_index, y = low * (1 - offset), text = "▲", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size)
-         
+        buy_label_perfect = label.new(x = bar_index, y = low * (1 - offset), text = "▲", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size)
     buy_perf_wait := false
 
 // ── Sell Setup ───────────────────────────────────────────────────────────────
-sel_cond = use_equal ? close >= close[look_back] : close > close[look_back]
+sel_cond = setup_use_equal == "With equal" ? close >= close[setup_look_back] : close > close[setup_look_back]
 if sel_cond
     if not sel_done
         sel_cnt += 1
@@ -230,12 +238,10 @@ if sel_cond
             sel_done := true
             array.push(cd_sel_cnts,  0)
             array.push(cd_sel_b8cls, na)
+            array.push(cd_sel_b5cls, na)
             array.push(cd_sel_ts,    time)
-            // array.clear(cd_buy_cnts)
-            // array.clear(cd_buy_b8cls)
-            // array.clear(cd_buy_ts)
+
             // 判定 Perfected Sell: 8或9的High > 6和7的High
-            // max67 = math.max(high[2], high[3])
             hi6   = array.get(sel_hi, setup_len - 4)
             hi7   = array.get(sel_hi, setup_len - 3)
             hi8   = array.get(sel_hi, setup_len - 2)
@@ -244,11 +250,8 @@ if sel_cond
             if hi8 >= max67 or hi9 >= max67
                 isSellPerfected := true
             
-            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1
-            // for i = ( setup_len - 1) to setup_len - 1
-                  
+            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1                  
                 if i == setup_len - 1
-                    // label_txt = 9 now
                     string label_txt = na
                     if enable_setup and enable_perfect_setup
                         if isSellPerfected
@@ -264,24 +267,23 @@ if sel_cond
                         if isSellPerfected
                             label_txt := '▼'
                             label_txt
-                    // else if (not enable_setup) and (not enable_perfect_setup)
                     if not na(label_txt)
                         if label_bold == "Bold"
-                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_bold)
+                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_bold)
                         else
-                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
                              
                 else 
                     if enable_setup
                         string label_txt = str.tostring(i + 1)
-                        sell_label_bar_non_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                        sell_label_bar_non_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
                          
             // if not immediately perfect, arm deferred watch
             if enable_perfect_setup and not isSellPerfected
                 sel_perf_wait := true
                 sel_perf_ref  := max67
 
-            if show_tdst
+            if enable_tdst
                 float setup_min_lo = array.min(sel_lo)
                 tdst_sel_price := setup_min_lo
                 float final_low = setup_min_lo * (1 - tdst_offset)
@@ -291,7 +293,7 @@ if sel_cond
                     line.set_extend(tdst_sel_line, extend.none)
                 tdst_sel_line := line.new(support_bar_index, final_low, bar_index, final_low, extend=extend.none, color=tdst_sup_color, style=tdst_line_style, width=tdst_line_weight)
             
-            if show_risk_level
+            if enable_risk_level
                 float max_th  = array.max(sel_th)
                 int   ext_idx = array.indexof(sel_th, max_th)
                 float ext_tl  = array.get(sel_lo, ext_idx)
@@ -313,7 +315,7 @@ if sel_cond
                     line.set_extend(risk_buy_ref_line, extend.none)
                     risk_buy_ref_line := na
                 risk_sel_line := line.new(bar_index, final_buy_risk_level, bar_index, final_buy_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
-                if show_risk_zone
+                if enable_risk_zone
                     risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
                     risk_sel_fill := linefill.new(risk_sel_line, risk_sel_ref_line, color=risk_sel_zone_color)
             
@@ -325,7 +327,7 @@ else
 // deferred sell perfection: runs every bar while armed
 if sel_perf_wait and high >= sel_perf_ref
     if enable_perfect_setup
-        sell_label_perfect = label.new(x = bar_index, y = high* (1 + offset), text = "▼", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size)
+        sell_label_perfect = label.new(x = bar_index, y = high* (1 + offset), text = "▼", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size)
 
     sel_perf_wait := false
 
@@ -352,6 +354,7 @@ if not na(risk_buy_line)
         line.set_style(risk_buy_line, tdst_line_break_style)
         risk_buy_line := na
         risk_buy_ref_line := na
+
 if not na(risk_sel_line)
     line.set_x2(risk_sel_line, bar_index)
     if not na(risk_sel_ref_line)
@@ -386,28 +389,37 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                     add_label := true
                 
                 if add_label
-                    buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = "13", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
+                    buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = "13", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
                     
                     array.remove(cd_buy_cnts,  i)
                     array.remove(cd_buy_b8cls, i)
+                    array.remove(cd_buy_b5cls, i)
                     array.remove(cd_buy_ts,    i)
         else
             // bars 1-12: standard close condition
             if cd_std_q
                 int new_cnt = cnt + 1
-                array.set(cd_buy_cnts, i, new_cnt)
-                if new_cnt == 8
-                    array.set(cd_buy_b8cls, i, close)
+                if new_cnt == 5
+                    array.set(cd_buy_cnts, i, new_cnt)
+                    array.set(cd_buy_b5cls, i, close)
+                else if new_cnt == 8
+                    bool set_buy_b8c = not enable_8_vs_5
+                    if enable_8_vs_5
+                        float b5c = array.get(cd_buy_b5cls, i)
+                        set_buy_b8c := not na(b5c) and low <= b5c
+                    
+                    if set_buy_b8c
+                        array.set(cd_buy_b8cls, i, close)
+                        array.set(cd_buy_cnts, i, new_cnt)
+                else
+                    array.set(cd_buy_cnts, i, new_cnt)
         i -= 1
     if show_all_bars == "All" and cd_std_q and array.size(cd_buy_cnts) > 0
-        // int last_cnt = array.get(cd_buy_cnts, array.size(cd_buy_cnts) - 1)
-        // label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
         int    last_i    = array.size(cd_buy_cnts) - 1
         int    last_cnt  = array.get(cd_buy_cnts, last_i)
         // int    start_ts  = array.get(cd_buy_ts,   last_i)
         // string date_str  = str.tostring(year(start_ts) % 100, "00") + str.tostring(month(start_ts), "00") + str.tostring(dayofmonth(start_ts), "00")
-        // string date_str  = str.tostring(dayofmonth(start_ts), "00")
-        buy_countdown_label_non_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
+        buy_countdown_label_non_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
 
 
 // ── Sell Countdown ────────────────────────────────────────────────────────────
@@ -436,29 +448,38 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                 if add_label
                     label_13_text = "13"
                         // label_13_text =  "13" + "-" + date_str
-                    sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = label_13_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_bold)
+                    sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = label_13_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_bold)
                     
                     array.remove(cd_sel_cnts,  i)
                     array.remove(cd_sel_b8cls, i)
+                    array.remove(cd_sel_b5cls, i)
                     array.remove(cd_sel_ts,    i)
 
         else
             // bars 1-12: standard close condition
             if cd_std_q
                 int new_cnt = cnt + 1
-                array.set(cd_sel_cnts, i, new_cnt)
-                if new_cnt == 8
-                    array.set(cd_sel_b8cls, i, close)
+                
+                if new_cnt == 5
+                    array.set(cd_sel_b5cls, i, close)
+                    array.set(cd_sel_cnts, i, new_cnt)
+                else if new_cnt == 8
+                    bool set_sell_b8c = not enable_8_vs_5
+                    if enable_8_vs_5
+                        float b5c = array.get(cd_sel_b5cls, i)
+                        set_sell_b8c := not na(b5c) and high >= b5c
+                    
+                    if set_sell_b8c
+                        array.set(cd_sel_cnts, i, new_cnt)
+                        array.set(cd_sel_b8cls, i, close)
+                else
+                    array.set(cd_sel_cnts, i, new_cnt)
                 
         i -= 1
     if show_all_bars == "All" and cd_std_q and array.size(cd_sel_cnts) > 0
-        // int last_cnt = array.get(cd_sel_cnts, array.size(cd_sel_cnts) - 1)
-        // label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_none)
         int    last_i   = array.size(cd_sel_cnts) - 1
         int    last_cnt = array.get(cd_sel_cnts, last_i)
-        int    start_ts = array.get(cd_sel_ts,   last_i)
-        string date_str = str.tostring(month(start_ts), "00") + str.tostring(dayofmonth(start_ts), "00")
-        sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
+        sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
 
 
 
