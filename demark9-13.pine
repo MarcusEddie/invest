@@ -1,5 +1,5 @@
 //@version=6
-indicator("TD Sequential – Setup", overlay=true, max_labels_count=500, max_lines_count=500, max_bars_back=5000)
+indicator("TD-Claude", overlay=true, max_labels_count=500, max_lines_count=500, max_bars_back=5000)
 
 // ── Inputs ────────────────────────────────────────────────────────────────────
 enable_setup  = input.bool(false,         "Show setup", group="Setup", display = display.none)
@@ -40,6 +40,9 @@ cd_compare        = input.string("With Equals", "Countdown Compare",            
 enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Setup", display = display.none)
 
 // ── State ─────────────────────────────────────────────────────────────────────
+var label[] labelQueue = array.new_label(500, na)
+cd_font_size = 12
+
 var int            buy_cnt  = 0
 var int            sel_cnt  = 0
 var bool           buy_done = false
@@ -70,20 +73,18 @@ var line         risk_buy_ref_line = na
 var line         risk_sel_ref_line = na
 var linefill     risk_buy_fill     = na
 var linefill     risk_sel_fill     = na
-// ── Buy Countdown State ───────────────────────────────────────────────────────
-var bool  cd_buy_active     = false
-var int   cd_buy_cnt        = 0
-var float cd_buy_bar8_close = na
-var array<int>   cd_buy_bi  = array.new<int>(13, 0)
-var array<float> cd_buy_lo  = array.new<float>(13, 0.0)
-// ── Sell Countdown State ──────────────────────────────────────────────────────
-var bool  cd_sel_active     = false
-var int   cd_sel_cnt        = 0
-var float cd_sel_bar8_close = na
-var array<int>   cd_sel_bi  = array.new<int>(13, 0)
-var array<float> cd_sel_hi  = array.new<float>(13, 0.0)
+// ── Countdown State (parallel arrays; one entry per active countdown) ─────────
+// Each Setup 9 pushes a new entry; countdowns run independently in parallel.
+var array<int>   cd_buy_cnts  = array.new<int>()    // current count per active buy countdown
+var array<float> cd_buy_b8cls = array.new<float>()  // bar-8 close per active buy countdown
+var array<int>   cd_sel_cnts  = array.new<int>()    // current count per active sell countdown
+var array<float> cd_sel_b8cls = array.new<float>()  // bar-8 close per active sell countdown
+var array<int>   cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
+var array<int>   cd_sel_ts    = array.new<int>()     // bar-9 start timestamp per active sell countdown
+
 
 var float offset = 0.01
+var float cd_offset = 0.005
 var float tdst_offset = 0.002
 var tdst_line_style = line.style_dashed
 var tdst_line_break_style = line.style_solid
@@ -109,11 +110,12 @@ if buy_cond
 
         if buy_cnt == setup_len
             buy_done := true
-            cd_buy_active     := true
-            cd_buy_cnt        := 0
-            cd_buy_bar8_close := na
-            cd_sel_active     := false
-            cd_sel_cnt        := 0
+            array.push(cd_buy_cnts,  0)
+            array.push(cd_buy_b8cls, na)
+            array.push(cd_buy_ts,    time)
+            // array.clear(cd_sel_cnts)
+            // array.clear(cd_sel_b8cls)
+            // array.clear(cd_sel_ts)
             // 判定 Perfected Buy: 8或9的Low < 6和7的Low
             lo6   = array.get(buy_lo, setup_len - 4)
             lo7   = array.get(buy_lo, setup_len - 3)
@@ -146,13 +148,17 @@ if buy_cond
                     // else if (not enable_setup) and (not enable_perfect_setup)
                     if not na(label_txt)
                         if label_bold == "Bold"
-                            label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_bold)
+                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_bold)
+                             
                         else
-                            label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                             
                 else 
                     if enable_setup
                         string label_txt = str.tostring(i + 1)
-                        label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                        buy_label_bar_non_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                         
+                        
             // if not immediately perfect, arm deferred watch
             if enable_perfect_setup and not isBuyPerfected
                 buy_perf_wait := true
@@ -202,7 +208,8 @@ else
 // deferred buy perfection: runs every bar while armed
 if buy_perf_wait and low <= buy_perf_ref
     if enable_perfect_setup
-        label.new(x = bar_index, y = low * (1 - offset), text = "▲", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size)
+        buy_label_perfect = label.new(x = bar_index, y = low * (1 - offset), text = "▲", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = buy_color, style = label.style_label_up, size = font_size)
+         
     buy_perf_wait := false
 
 // ── Sell Setup ───────────────────────────────────────────────────────────────
@@ -217,11 +224,12 @@ if sel_cond
 
         if sel_cnt == setup_len
             sel_done := true
-            cd_buy_active := false
-            cd_buy_cnt    := 0
-            cd_sel_active     := true
-            cd_sel_cnt        := 0
-            cd_sel_bar8_close := na
+            array.push(cd_sel_cnts,  0)
+            array.push(cd_sel_b8cls, na)
+            array.push(cd_sel_ts,    time)
+            // array.clear(cd_buy_cnts)
+            // array.clear(cd_buy_b8cls)
+            // array.clear(cd_buy_ts)
             // 判定 Perfected Sell: 8或9的High > 6和7的High
             // max67 = math.max(high[2], high[3])
             hi6   = array.get(sel_hi, setup_len - 4)
@@ -253,13 +261,16 @@ if sel_cond
                     // else if (not enable_setup) and (not enable_perfect_setup)
                     if not na(label_txt)
                         if label_bold == "Bold"
-                            label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_bold)
+                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_bold)
+                             
                         else
-                            label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                             
                 else 
                     if enable_setup
                         string label_txt = str.tostring(i + 1)
-                        label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                        sell_label_bar_non_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                         
             // if not immediately perfect, arm deferred watch
             if enable_perfect_setup and not isSellPerfected
                 sel_perf_wait := true
@@ -309,7 +320,8 @@ else
 // deferred sell perfection: runs every bar while armed
 if sel_perf_wait and high >= sel_perf_ref
     if enable_perfect_setup
-        label.new(x = bar_index, y = high* (1 + offset), text = "▼", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size)
+        sell_label_perfect = label.new(x = bar_index, y = high* (1 + offset), text = "▼", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = sell_color, style = label.style_label_down, size = font_size)
+
     sel_perf_wait := false
 
 // ── Extend active TDST lines to current bar, terminate if close crosses ──────
@@ -346,53 +358,115 @@ if not na(risk_sel_line)
 
 
 // ── Buy Countdown ─────────────────────────────────────────────────────────────
-// Rules:
-//   1. Arms after Buy Setup 9 completes; Bar 9 can simultaneously be CD Bar 1
-//      if close <= low[2], otherwise waits for the first qualifying bar.
-//   2. Counts bars where close <= low[cd_look_back] (cd_look_back default = 2).
-//   3. At Bar 13: completion requires low[13] <= close[8] (condition 1).
-//      Condition 2 (close <= low[2]) is implicit — only qualifying bars are counted.
-//   4. Cancelled if a Sell Setup 9 completes while active.
-if enable_sequential_countdown and cd_buy_active
-    bool cd_cond = cd_compare == "With Equals" ? close <= low[cd_look_back] : close < low[cd_look_back]
-    if cd_cond and cd_buy_cnt < 13
-        cd_buy_cnt += 1
-        array.set(cd_buy_bi, cd_buy_cnt - 1, bar_index)
-        array.set(cd_buy_lo, cd_buy_cnt - 1, low)
-        if cd_buy_cnt == 8
-            cd_buy_bar8_close := close
-        if cd_buy_cnt == 13
-            // Condition 1: low of Bar 13 <= close of Bar 8
-            if not na(cd_buy_bar8_close) and low <= cd_buy_bar8_close
-                string countdown_label = str.tostring(cd_buy_cnt)
-                label.new(x = bar_index, y = low * (1 - offset), text = countdown_label, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
-            cd_buy_active := false
-        else if show_all_bars == "All"
-            label.new(x = bar_index, y = low * (1 - offset), text = str.tostring(cd_buy_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
+// Each Buy Setup 9 pushes a new entry; all run in parallel.
+// Cancelled wholesale when a Sell Setup 9 completes.
+// Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
+if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
+    float buy_cur   = cd_term_val == "Close" ? close : cd_term_val == "Open or Close" ? math.min(open, close) : low
+    bool  cd_term_q = cd_compare == "With Equals" ? buy_cur <= low[cd_look_back] : buy_cur < low[cd_look_back]
+    bool  cd_std_q  = cd_compare == "With Equals" ? close   <= low[cd_look_back] : close   < low[cd_look_back]
+    int i = array.size(cd_buy_cnts) - 1
+    while i >= 0
+        int cnt = array.get(cd_buy_cnts, i)
+        if cnt == 12
+            // bar 13 candidate: only cd_term_val price qualifies; if it does, check condition 1 then remove
+            if cd_term_q
+                float b8c = array.get(cd_buy_b8cls, i)
+                if not na(b8c) and buy_cur <= b8c
+                    buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = "13", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
+                    
+                    array.remove(cd_buy_cnts,  i)
+                    array.remove(cd_buy_b8cls, i)
+                    array.remove(cd_buy_ts,    i)
+        else
+            // bars 1-12: standard close condition
+            if cd_std_q
+                int new_cnt = cnt + 1
+                array.set(cd_buy_cnts, i, new_cnt)
+                if new_cnt == 8
+                    array.set(cd_buy_b8cls, i, close)
+        i -= 1
+    if show_all_bars == "All" and cd_std_q and array.size(cd_buy_cnts) > 0
+        // int last_cnt = array.get(cd_buy_cnts, array.size(cd_buy_cnts) - 1)
+        // label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
+        int    last_i    = array.size(cd_buy_cnts) - 1
+        int    last_cnt  = array.get(cd_buy_cnts, last_i)
+        int    start_ts  = array.get(cd_buy_ts,   last_i)
+        // string date_str  = str.tostring(year(start_ts) % 100, "00") + str.tostring(month(start_ts), "00") + str.tostring(dayofmonth(start_ts), "00")
+        string date_str  = str.tostring(dayofmonth(start_ts), "00")
+        buy_countdown_label_non_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt) + "-" + date_str, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
+        
 
+        
+// // ── Sell Countdown ────────────────────────────────────────────────────────────
+// // Each Sell Setup 9 pushes a new entry; all run in parallel.
+// // Cancelled wholesale when a Buy Setup 9 completes.
+// if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
+//     // float sel_cur    = cd_term_val == "Close" ? close : cd_term_val == "Open or Close" ? math.max(open, close) : high
+//     bool cd_sel_cond = cd_compare == "With Equals" ? close >= high[cd_look_back] : close > high[cd_look_back]
+    
+//     if cd_sel_cond
+//         int i = array.size(cd_sel_cnts) - 1
+//         while i >= 0
+//             int cnt = array.get(cd_sel_cnts, i) + 1
+//             if cnt == 8
+//                 array.set(cd_sel_b8cls, i, close)
+//                 array.set(cd_sel_cnts,  i, cnt)
+//             else if cnt == 13
+//                 float b8c = array.get(cd_sel_b8cls, i)
+//                 // float sel_term = cd_term_val == "Close" ? close : cd_term_val == "Open or Close" ? math.max(open, close) : high
+
+//                 if not na(b8c) and high >= b8c
+//                 // if not na(b8c) and sel_term >= b8c
+//                     label.new(x = bar_index, y = high * (1 + cd_offset), text = "13", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_bold)
+//                 array.remove(cd_sel_cnts,  i)
+//                 array.remove(cd_sel_b8cls, i)
+//             else
+//                 array.set(cd_sel_cnts, i, cnt)
+//             i -= 1
+//         if show_all_bars == "All" and array.size(cd_sel_cnts) > 0
+//             int last_cnt = array.get(cd_sel_cnts, array.size(cd_sel_cnts) - 1)
+//             label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt) + 'S', xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_none)
 
 // ── Sell Countdown ────────────────────────────────────────────────────────────
-// Rules:
-//   1. Arms after Sell Setup 9 completes; Bar 9 can simultaneously be CD Bar 1
-//      if close >= high[2], otherwise waits for the first qualifying bar.
-//   2. Counts bars where close >= high[cd_look_back] (cd_look_back default = 2).
-//   3. At Bar 13: completion requires high[13] >= close[8] (condition 1).
-//      Condition 2 (close >= high[2]) is implicit — only qualifying bars are counted.
-//   4. Cancelled if a Buy Setup 9 completes while active.
-if enable_sequential_countdown and cd_sel_active
-    bool cd_sel_cond = cd_compare == "With Equals" ? close >= high[cd_look_back] : close > high[cd_look_back]
-    if cd_sel_cond and cd_sel_cnt < 13
-        cd_sel_cnt += 1
-        array.set(cd_sel_bi, cd_sel_cnt - 1, bar_index)
-        array.set(cd_sel_hi, cd_sel_cnt - 1, high)
-        if cd_sel_cnt == 8
-            cd_sel_bar8_close := close
-        if cd_sel_cnt == 13
-            // Condition 1: high of Bar 13 >= close of Bar 8
-            if not na(cd_sel_bar8_close) and high >= cd_sel_bar8_close
-                string countdown_label = str.tostring(cd_sel_cnt)
-                label.new(x = bar_index, y = high * (1 + offset), text = countdown_label, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_bold)
-            cd_sel_active := false
-        else if show_all_bars == "All"
-            label.new(x = bar_index, y = high * (1 + offset), text = str.tostring(cd_sel_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_none)
-
+// Each Sell Setup 9 pushes a new entry; all run in parallel.
+// Cancelled wholesale when a Buy Setup 9 completes.
+// Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
+if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
+    float sel_cur   = cd_term_val == "Close" ? close : cd_term_val == "Open or Close" ? math.max(open, close) : high
+    bool  cd_term_q = cd_compare == "With Equals" ? sel_cur >= high[cd_look_back] : sel_cur > high[cd_look_back]
+    bool  cd_std_q  = cd_compare == "With Equals" ? close   >= high[cd_look_back] : close   > high[cd_look_back]
+    int i = array.size(cd_sel_cnts) - 1
+    while i >= 0
+        int cnt = array.get(cd_sel_cnts, i)
+        if cnt == 12
+            // bar 13 candidate: only cd_term_val price qualifies; if it does, check condition 1 then remove
+            if cd_term_q
+                float b8c = array.get(cd_sel_b8cls, i)
+                if not na(b8c) and sel_cur >= b8c
+                    int start_ts = array.get(cd_sel_ts, i)
+                    string date_str = str.tostring(month(start_ts), "00") + str.tostring(dayofmonth(start_ts), "00")
+                    sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = "13" + "-" + date_str, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_bold)
+                    
+                    array.remove(cd_sel_cnts,  i)
+                    array.remove(cd_sel_b8cls, i)
+                    array.remove(cd_sel_ts,    i)
+        else
+            // bars 1-12: standard close condition
+            if cd_std_q
+                int new_cnt = cnt + 1
+                array.set(cd_sel_cnts, i, new_cnt)
+                if new_cnt == 8
+                    array.set(cd_sel_b8cls, i, close)
+        i -= 1
+    if show_all_bars == "All" and cd_std_q and array.size(cd_sel_cnts) > 0
+        // int last_cnt = array.get(cd_sel_cnts, array.size(cd_sel_cnts) - 1)
+        // label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = text.format_none)
+        int    last_i   = array.size(cd_sel_cnts) - 1
+        int    last_cnt = array.get(cd_sel_cnts, last_i)
+        int    start_ts = array.get(cd_sel_ts,   last_i)
+        // string date_str = str.tostring(year(start_ts) % 100, "00") + str.tostring(month(start_ts), "00") + str.tostring(dayofmonth(start_ts), "00")
+        string date_str = str.tostring(month(start_ts), "00") + str.tostring(dayofmonth(start_ts), "00")
+        if last_cnt == 1 or last_cnt == 8 or last_cnt == 12
+            sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt) + ":" + date_str, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
+            
