@@ -37,6 +37,9 @@ cd_comp_val       = input.string("Close",       "Countdown Comparison Value",   
 cd_term_val       = input.string("Open or Close",    "Termination Count Price Value", options=["Open or Close", "Close", "Low/High"],          group="Countdown", display = display.none)
 cd_compare        = input.string("With Equals", "Countdown Compare",            options=["With Equals", "Without Equals"],               group="Countdown", display = display.none)
 
+enable_13_vs_8 = input.bool(false,                      "Last vs 8 qualifier",       group="Sequential Countdown", display = display.none)
+enable_8_vs_5 = input.bool(false,                      "8 vs 5 qualifier",       group="Sequential Countdown", display = display.none)
+
 enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Setup", display = display.none)
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -374,7 +377,15 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
             float b8c = array.get(cd_buy_b8cls, i)
             // bar 13 candidate: only cd_term_val price qualifies; if it does, check condition 1 then remove
             if cd_term_q
-                if not na(b8c) and low <= b8c
+                bool add_label = false
+
+                if enable_13_vs_8
+                    if not na(b8c) and low <= b8c
+                        add_label := true
+                else
+                    add_label := true
+                
+                if add_label
                     buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = "13", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
                     
                     array.remove(cd_buy_cnts,  i)
@@ -415,14 +426,22 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
             float b8c = array.get(cd_sel_b8cls, i)
  
             if cd_term_q
-                if not na(b8c) and high >= b8c
+                bool add_label = false
+                if enable_13_vs_8
+                    if not na(b8c) and high >= b8c
+                        add_label := true
+                else
+                    add_label := true
+                
+                if add_label
                     label_13_text = "13"
-                    // label_13_text =  "13" + "-" + date_str
+                        // label_13_text =  "13" + "-" + date_str
                     sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = label_13_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_bold)
                     
                     array.remove(cd_sel_cnts,  i)
                     array.remove(cd_sel_b8cls, i)
                     array.remove(cd_sel_ts,    i)
+
         else
             // bars 1-12: standard close condition
             if cd_std_q
