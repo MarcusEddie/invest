@@ -464,7 +464,7 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                     label_13_txt = "13"
                     buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = label_13_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
                     
-                    if enable_seq_risk_level
+                    if enable_seq_risk_level or enable_seq_risk_zone
                         float peak_th = array.get(seq_cd_buy_peak_th, i)
                         float peak_tl = array.get(seq_cd_buy_peak_tl, i)
                         if not na(peak_th) and not na(peak_tl)
@@ -474,7 +474,9 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                             if not na(seq_cd_risk_buy_line)
                                 line.set_x2(seq_cd_risk_buy_line, bar_index)
                                 line.set_extend(seq_cd_risk_buy_line, extend.none)
-                            seq_cd_risk_buy_line := line.new(bar_index, final_seq_cd_buy_risk_level, bar_index, final_seq_cd_buy_risk_level, extend=extend.none, color=seq_cd_buy_color, style=line.style_dashed, width=risk_level_line_weight)
+                            color seq_buy_rl_color = enable_seq_risk_level ? seq_cd_buy_color : color.new(color.white, 100)
+
+                            seq_cd_risk_buy_line := line.new(bar_index, final_seq_cd_buy_risk_level, bar_index, final_seq_cd_buy_risk_level, extend=extend.none, color=seq_buy_rl_color, style=line.style_dashed, width=risk_level_line_weight)
                             if enable_seq_risk_zone
                                 if not na(seq_cd_risk_buy_ref_line)
                                     line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
@@ -554,7 +556,7 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                     label_13_text = "13"
                     sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = label_13_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_bold)
                     
-                    if enable_seq_risk_level
+                    if enable_seq_risk_level or enable_seq_risk_zone
                         float peak_th = array.get(seq_cd_sel_peak_th, i)
                         float peak_tl = array.get(seq_cd_sel_peak_tl, i)
                         if not na(peak_th) and not na(peak_tl)
@@ -564,8 +566,9 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                             if not na(seq_cd_risk_sel_line)
                                 line.set_x2(seq_cd_risk_sel_line, bar_index)
                                 line.set_extend(seq_cd_risk_sel_line, extend.none)
-
-                            seq_cd_risk_sel_line := line.new(bar_index, final_seq_cd_sell_risk_level, bar_index, final_seq_cd_sell_risk_level, extend=extend.none, color=seq_cd_sell_color, style=line.style_dashed, width=risk_level_line_weight)
+                            
+                            color seq_sell_rl_color = enable_seq_risk_level ? seq_cd_sell_color : color.new(color.white, 100)
+                            seq_cd_risk_sel_line := line.new(bar_index, final_seq_cd_sell_risk_level, bar_index, final_seq_cd_sell_risk_level, extend=extend.none, color=seq_sell_rl_color, style=line.style_dashed, width=risk_level_line_weight)
                             if enable_seq_risk_zone
                                 if not na(seq_cd_risk_sel_ref_line)
                                     line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
@@ -602,4 +605,3 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
         int    last_i   = array.size(cd_sel_cnts) - 1
         int    last_cnt = array.get(cd_sel_cnts, last_i)
         sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
-
