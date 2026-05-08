@@ -55,7 +55,7 @@ enable_combo_risk_zone = input.bool(false,                      "Enable Risk Lev
 enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Breakout qualifiers", display = display.none)
 
 // ── State ─────────────────────────────────────────────────────────────────────
-cd_font_size = 21
+cd_font_size = 20
 
 var int            buy_cnt  = 0
 var int            sel_cnt  = 0
@@ -97,7 +97,7 @@ var array<int>   cd_buy_cnts  = array.new<int>()    // current count per active 
 var array<int>   cd_sel_cnts  = array.new<int>()    // current count per active sell countdown
 var array<float> cd_buy_b8cls = array.new<float>()  // bar-8 close per active buy countdown
 var array<float> cd_sel_b8cls = array.new<float>()  // bar-8 close per active sell countdown
-var array<int>   cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
+var array<int>   seq_cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
 var array<int>   cd_sel_ts    = array.new<int>()     // bar-9 start timestamp per active sell countdown
 var array<float> cd_buy_b5cls = array.new<float>()  // bar-5 close per active buy countdown (8vs5 qualifier)
 var array<float> cd_sel_b5cls = array.new<float>()  // bar-5 close per active sell countdown (8vs5 qualifier)
@@ -120,6 +120,20 @@ var tdst_line_break_style = line.style_solid
 bool isBuyPerfected = false
 bool isSellPerfected = false
 
+// Returns true only on the bar whose time matches the stored timestamp.
+enable_print_log(int cur_bar_time, int target_year, int target_month, int target_day, string op) =>
+    int cur_ymd    = year(cur_bar_time) * 10000 + month(cur_bar_time) * 100 + dayofmonth(cur_bar_time)
+    int target_ymd = target_year * 10000 + target_month * 100 + target_day
+    switch op
+        "<"  => cur_ymd <  target_ymd
+        "<=" => cur_ymd <= target_ymd
+        ">"  => cur_ymd >  target_ymd
+        ">=" => cur_ymd >= target_ymd
+        =>     cur_ymd == target_ymd
+
+time_to_yyyymmdd(int cur_bar_time) =>
+    str.tostring(year(cur_bar_time) % 100, "00") + str.tostring(month(cur_bar_time), "00") + str.tostring(dayofmonth(cur_bar_time), "00")
+
 // ── True High / True Low ─────────────────────────────────────────────────────
 true_high = math.max(high, nz(close[1], high))
 true_low  = math.min(low,  nz(close[1], low))
@@ -140,11 +154,11 @@ if buy_cond
             array.push(cd_buy_cnts,  0)
             array.push(cd_buy_b8cls, na)
             array.push(cd_buy_b5cls, na)
-            array.push(seq_cd_buy_peak_th, true_high)
-            array.push(seq_cd_buy_peak_tl, true_low)
+            array.push(seq_cd_buy_peak_th, na)
+            array.push(seq_cd_buy_peak_tl, na)
 
 
-            // array.push(cd_buy_ts,    time)
+            // array.push(seq_cd_buy_ts, time)
             // Sell countdown risk level terminates at Buy Setup 9
             if not na(seq_cd_risk_sel_line)
                 line.set_x2(seq_cd_risk_sel_line, bar_index)
@@ -156,7 +170,6 @@ if buy_cond
             lo7   = array.get(buy_lo, setup_len - 3)
             lo8   = array.get(buy_lo, setup_len - 2)
             lo9   = array.get(buy_lo, setup_len - 1)
-            // min67 = math.min(low[2], low[3])
             min67 = math.min(lo6, lo7)
             if lo8 <= min67 or lo9 <= min67
                 isBuyPerfected := true
@@ -164,7 +177,6 @@ if buy_cond
             
             for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1
                 if i == setup_len - 1
-                    // label_txt = 9 now
                     string label_txt = na
                     if enable_setup and enable_perfect_setup
                         if isBuyPerfected
@@ -260,8 +272,8 @@ if sel_cond
             array.push(cd_sel_cnts,  0)
             array.push(cd_sel_b8cls, na)
             array.push(cd_sel_b5cls, na)
-            array.push(seq_cd_sel_peak_th, true_high)
-            array.push(seq_cd_sel_peak_tl, true_low)
+            array.push(seq_cd_sel_peak_th, na)
+            array.push(seq_cd_sel_peak_tl, na)
 
             // array.push(cd_sel_ts,    time)
 
@@ -270,7 +282,6 @@ if sel_cond
                 line.set_x2(seq_cd_risk_buy_line, bar_index)
                 seq_cd_risk_buy_line  := na
                 seq_cd_risk_buy_price := na
-            
 
             // 判定 Perfected Sell: 8或9的High > 6和7的High
             hi6   = array.get(sel_hi, setup_len - 4)
@@ -281,7 +292,7 @@ if sel_cond
             if hi8 >= max67 or hi9 >= max67
                 isSellPerfected := true
             
-            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1                  
+            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1 
                 if i == setup_len - 1
                     string label_txt = na
                     if enable_setup and enable_perfect_setup
@@ -405,6 +416,7 @@ if not na(seq_cd_risk_buy_line)
         seq_cd_risk_buy_line := na
         // risk_sel_ref_line := na
       
+
 // ── Buy Countdown ─────────────────────────────────────────────────────────────
 // Each Buy Setup 9 pushes a new entry; all run in parallel.
 // Cancelled wholesale when a Sell Setup 9 completes.
@@ -416,20 +428,16 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
     int i = array.size(cd_buy_cnts) - 1
     while i >= 0
         int cnt = array.get(cd_buy_cnts, i)
-        float cur_peak = array.get(seq_cd_buy_peak_tl, i)
-        if na(cur_peak) or true_low <= cur_peak
-            array.set(seq_cd_buy_peak_tl, i, true_low)
-            array.set(seq_cd_buy_peak_th, i, true_high)
-
+        if (cnt > 0) or (cnt == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
+            float cur_peak = array.get(seq_cd_buy_peak_tl, i)
+            if na(cur_peak) or true_low < cur_peak
+                array.set(seq_cd_buy_peak_tl, i, true_low)
+                array.set(seq_cd_buy_peak_th, i, true_high)
+                
         if cnt == 12
             float b8c = array.get(cd_buy_b8cls, i)
             // bar 13 candidate: only cd_term_val price qualifies; if it does, check condition 1 then remove
             if cd_term_q
-                // float cur_peak = array.get(seq_cd_buy_peak_tl, i)
-                // if na(cur_peak) or true_low < cur_peak
-                //     array.set(seq_cd_buy_peak_tl, i, true_low)
-                //     array.set(seq_cd_buy_peak_th, i, true_high)
-
                 bool add_label = false
 
                 if enable_13_vs_8
@@ -439,7 +447,10 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                     add_label := true
                 
                 if add_label
-                    buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = "13", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
+                    string start_time = time_to_yyyymmdd(array.get(seq_cd_buy_ts, i))
+                    // label_13_txt = "13" + "\n" + start_time
+                    label_13_txt = "13"
+                    buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = label_13_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_bold)
                     
                     if enable_seq_risk_level
                         float peak_th = array.get(seq_cd_buy_peak_th, i)
@@ -458,15 +469,9 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                     array.remove(cd_buy_b5cls, i)
                     array.remove(seq_cd_buy_peak_th, i)
                     array.remove(seq_cd_buy_peak_tl, i)
-                    // array.remove(cd_buy_ts,    i)
+                    // array.remove(seq_cd_buy_ts,    i)
         else
-            // bars 1-12: standard close condition
             if cd_std_q
-                // float cur_peak = array.get(seq_cd_buy_peak_tl, i)
-                // if na(cur_peak) or true_low < cur_peak
-                //     array.set(seq_cd_buy_peak_tl, i, true_low)
-                //     array.set(seq_cd_buy_peak_th, i, true_high)
-
                 int new_cnt = cnt + 1
                 if new_cnt == 5
                     array.set(cd_buy_cnts, i, new_cnt)
@@ -486,18 +491,14 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
     if show_all_bars == "All" and cd_std_q and array.size(cd_buy_cnts) > 0
         int    last_i    = array.size(cd_buy_cnts) - 1
         int    last_cnt  = array.get(cd_buy_cnts, last_i)
-        // int    start_ts  = array.get(cd_buy_ts,   last_i)
-        // string date_str  = str.tostring(year(start_ts) % 100, "00") + str.tostring(month(start_ts), "00") + str.tostring(dayofmonth(start_ts), "00")
+        // if enable_print_log(time, 2022, 03, 16, "<=") and enable_print_log(time, 2022, 01, 24, ">=")
         buy_countdown_label_non_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
 
 if not na(seq_cd_risk_sel_line)
     line.set_x2(seq_cd_risk_sel_line, bar_index)
-    // if not na(risk_sel_ref_line)
-    //     line.set_x2(risk_sel_ref_line, bar_index)
     if close > seq_cd_risk_sel_price
         line.set_style(seq_cd_risk_sel_line, tdst_line_break_style)
         seq_cd_risk_sel_line := na
-        // risk_sel_ref_line := na
         
 // ── Sell Countdown ────────────────────────────────────────────────────────────
 // Each Sell Setup 9 pushes a new entry; all run in parallel.
@@ -511,10 +512,11 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
     while i >= 0
         int cnt = array.get(cd_sel_cnts, i)
 
-        float cur_peak = array.get(seq_cd_sel_peak_th, i)
-        if na(cur_peak) or true_high > cur_peak
-            array.set(seq_cd_sel_peak_th, i, true_high)
-            array.set(seq_cd_sel_peak_tl, i, true_low)
+        if (cnt > 0) or (cnt == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
+            float cur_peak = array.get(seq_cd_sel_peak_th, i)
+            if na(cur_peak) or true_high > cur_peak
+                array.set(seq_cd_sel_peak_th, i, true_high)
+                array.set(seq_cd_sel_peak_tl, i, true_low)
 
         if cnt == 12
             float b8c = array.get(cd_sel_b8cls, i)
@@ -573,5 +575,4 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
         int    last_i   = array.size(cd_sel_cnts) - 1
         int    last_cnt = array.get(cd_sel_cnts, last_i)
         sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
-
 
