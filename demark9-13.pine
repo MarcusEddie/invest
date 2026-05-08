@@ -83,14 +83,20 @@ var line         risk_buy_line  = na
 var line         risk_sel_line  = na
 var float        risk_buy_price = na
 var float        risk_sel_price = na
-var float        seq_cd_risk_buy_price = na
-var float        seq_cd_risk_sel_price = na
-var line         seq_cd_risk_buy_line  = na
-var line         seq_cd_risk_sel_line  = na
 var line         risk_buy_ref_line = na
 var line         risk_sel_ref_line = na
 var linefill     risk_buy_fill     = na
 var linefill     risk_sel_fill     = na
+
+var float        seq_cd_risk_buy_price = na
+var float        seq_cd_risk_sel_price = na
+var line         seq_cd_risk_buy_line  = na
+var line         seq_cd_risk_sel_line  = na
+var line         seq_cd_risk_buy_ref_line = na
+var line         seq_cd_risk_sel_ref_line = na
+var linefill     seq_cd_risk_buy_fill     = na
+var linefill     seq_cd_risk_sel_fill     = na
+
 // ── Countdown State (parallel arrays; one entry per active countdown) ─────────
 // Each Setup 9 pushes a new entry; countdowns run independently in parallel.
 var array<int>   cd_buy_cnts  = array.new<int>()    // current count per active buy countdown
@@ -164,6 +170,9 @@ if buy_cond
                 line.set_x2(seq_cd_risk_sel_line, bar_index)
                 seq_cd_risk_sel_line  := na
                 seq_cd_risk_sel_price := na
+            if not na(seq_cd_risk_sel_ref_line)
+                line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
+                seq_cd_risk_sel_ref_line := na
 
             // 判定 Perfected Buy: 8或9的Low < 6和7的Low
             lo6   = array.get(buy_lo, setup_len - 4)
@@ -282,6 +291,9 @@ if sel_cond
                 line.set_x2(seq_cd_risk_buy_line, bar_index)
                 seq_cd_risk_buy_line  := na
                 seq_cd_risk_buy_price := na
+            if not na(seq_cd_risk_buy_ref_line)
+                line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
+                seq_cd_risk_buy_ref_line := na
 
             // 判定 Perfected Sell: 8或9的High > 6和7的High
             hi6   = array.get(sel_hi, setup_len - 4)
@@ -409,13 +421,13 @@ if not na(risk_sel_line)
 
 if not na(seq_cd_risk_buy_line)
     line.set_x2(seq_cd_risk_buy_line, bar_index)
-    // if not na(risk_sel_ref_line)
-    //     line.set_x2(risk_sel_ref_line, bar_index)
+    if not na(seq_cd_risk_buy_ref_line)
+        line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
     if close < seq_cd_risk_buy_price
         line.set_style(seq_cd_risk_buy_line, tdst_line_break_style)
-        seq_cd_risk_buy_line := na
-        // risk_sel_ref_line := na
-      
+        seq_cd_risk_buy_line     := na
+        seq_cd_risk_buy_ref_line := na
+
 
 // ── Buy Countdown ─────────────────────────────────────────────────────────────
 // Each Buy Setup 9 pushes a new entry; all run in parallel.
@@ -463,6 +475,12 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                                 line.set_x2(seq_cd_risk_buy_line, bar_index)
                                 line.set_extend(seq_cd_risk_buy_line, extend.none)
                             seq_cd_risk_buy_line := line.new(bar_index, final_seq_cd_buy_risk_level, bar_index, final_seq_cd_buy_risk_level, extend=extend.none, color=seq_cd_buy_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_seq_risk_zone
+                                if not na(seq_cd_risk_buy_ref_line)
+                                    line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
+                                    line.set_extend(seq_cd_risk_buy_ref_line, extend.none)
+                                seq_cd_risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                seq_cd_risk_buy_fill := linefill.new(seq_cd_risk_buy_ref_line, seq_cd_risk_buy_line, color=risk_buy_zone_color)
 
                     array.remove(cd_buy_cnts,  i)
                     array.remove(cd_buy_b8cls, i)
@@ -494,12 +512,15 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
         // if enable_print_log(time, 2022, 03, 16, "<=") and enable_print_log(time, 2022, 01, 24, ">=")
         buy_countdown_label_non_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
 
+
 if not na(seq_cd_risk_sel_line)
     line.set_x2(seq_cd_risk_sel_line, bar_index)
+    if not na(seq_cd_risk_sel_ref_line)
+        line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
     if close > seq_cd_risk_sel_price
         line.set_style(seq_cd_risk_sel_line, tdst_line_break_style)
-        seq_cd_risk_sel_line := na
-        
+        seq_cd_risk_sel_line     := na
+        seq_cd_risk_sel_ref_line := na
 // ── Sell Countdown ────────────────────────────────────────────────────────────
 // Each Sell Setup 9 pushes a new entry; all run in parallel.
 // Cancelled wholesale when a Buy Setup 9 completes.
@@ -545,6 +566,12 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                                 line.set_extend(seq_cd_risk_sel_line, extend.none)
 
                             seq_cd_risk_sel_line := line.new(bar_index, final_seq_cd_sell_risk_level, bar_index, final_seq_cd_sell_risk_level, extend=extend.none, color=seq_cd_sell_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_seq_risk_zone
+                                if not na(seq_cd_risk_sel_ref_line)
+                                    line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
+                                    line.set_extend(seq_cd_risk_sel_ref_line, extend.none)
+                                seq_cd_risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                seq_cd_risk_sel_fill := linefill.new(seq_cd_risk_sel_line, seq_cd_risk_sel_ref_line, color=color.new(seq_cd_sell_color, 90))
                             
                     array.remove(cd_sel_cnts,  i)
                     array.remove(cd_sel_b8cls, i)
