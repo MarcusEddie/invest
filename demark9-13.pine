@@ -146,7 +146,6 @@ true_low  = math.min(low,  nz(close[1], low))
 
 // ── Buy Setup ────────────────────────────────────────────────────────────────
 buy_cond = setup_use_equal == "With equal" ? close <= close[setup_look_back] : close < close[setup_look_back]
-// SETUP 看看怎么加入允许没有价格翻转的控制箱，芯片上个月连续两个sell 9，且没有价格翻转
 if buy_cond
     if not buy_done
         buy_cnt += 1
@@ -254,6 +253,12 @@ if buy_cond
                 if enable_risk_zone
                     risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
                     risk_buy_fill := linefill.new(risk_buy_ref_line, risk_buy_line, color=risk_buy_zone_color)
+            
+            // // SETUP 看看怎么加入允许没有价格翻转的控制箱，芯片上个月连续两个sell 9，且没有价格翻转, 但是perfect（尤其是delay的perfect）是否也要同时停掉，这个得要找点资料研究下
+            // if not enable_price_flip
+            //     buy_cnt       := 0
+            //     buy_done      := false
+            //     buy_perf_wait := false
             
 else
     buy_cnt  := 0
@@ -372,7 +377,10 @@ if sel_cond
                 if enable_risk_zone
                     risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
                     risk_sel_fill := linefill.new(risk_sel_line, risk_sel_ref_line, color=risk_sel_zone_color)
-            
+            // if not enable_price_flip
+            //     sel_cnt       := 0
+            //     sel_done      := false
+            //     sel_perf_wait := false
                 
 else
     sel_cnt  := 0
