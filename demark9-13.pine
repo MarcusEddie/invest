@@ -43,6 +43,7 @@ cd_term_val       = input.string("Open or Close",    "Termination Count Price Va
 cd_compare        = input.string("With Equals", "Countdown Compare",            options=["With Equals", "Without Equals"],               group="Countdown (shared)", display = display.none)
 
 enable_seq_intersection = input.bool(false,                      "Enable Intersection",       group="Sequential Countdown", display = display.none)
+seq_intersection_cnt = input.int(13,                      "Intersection Lookback Bars",       group="Sequential Countdown", display = display.none)
 enable_8_vs_5 = input.bool(false,                      "8 vs 5 qualifier",       group="Sequential Countdown", display = display.none)
 enable_13_vs_8 = input.bool(false,                      "Last vs 8 qualifier",       group="Sequential Countdown", display = display.none)
 enable_seq_risk_level = input.bool(false,                      "Enable Risk Level",       group="Sequential Countdown", display = display.none)
@@ -105,16 +106,17 @@ var array<float> cd_buy_b8cls = array.new<float>()  // bar-8 close per active bu
 var array<float> cd_sel_b8cls = array.new<float>()  // bar-8 close per active sell countdown
 var array<int>   seq_cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
 var array<int>   cd_sel_ts    = array.new<int>()     // bar-9 start timestamp per active sell countdown
-var array<float> cd_buy_b5cls = array.new<float>()  // bar-5 close per active buy countdown (8vs5 qualifier)
-var array<float> cd_sel_b5cls = array.new<float>()  // bar-5 close per active sell countdown (8vs5 qualifier)
+var array<float> seq_cd_buy_b5cls = array.new<float>()  // bar-5 close per active buy countdown (8vs5 qualifier)
+var array<float> seq_cd_sel_b5cls = array.new<float>()  // bar-5 close per active sell countdown (8vs5 qualifier)
 
 var array<float> seq_cd_sel_peak_th = array.new<float>()  // running-max true high per active sell countdown
 var array<float> seq_cd_sel_peak_tl = array.new<float>()  // true low of the bar that set the running-max true high
 
 var array<float> seq_cd_buy_peak_th = array.new<float>()  // true high of the bar that set the running-min true low
 var array<float> seq_cd_buy_peak_tl = array.new<float>()  // running-min true low per active buy countdown
-var array<bool>  cd_buy_inters      = array.new<bool>()   // intersection satisfied per active buy countdown
-var array<bool>  cd_sel_inters      = array.new<bool>()   // intersection satisfied per active sell countdown
+var array<bool>  seq_cd_buy_inters      = array.new<bool>()   // intersection satisfied per active buy countdown
+var array<bool>  seq_cd_sel_inters      = array.new<bool>()   // intersection satisfied per active sell countdown
+var array<int> seq_cd_intersection_bar_9_checked = array.new<int>()
 
 // var float offset = 0.01
 var float offset = 0
@@ -161,21 +163,28 @@ if buy_cond
             buy_done := true
             array.push(cd_buy_cnts,  0)
             array.push(cd_buy_b8cls, na)
-            array.push(cd_buy_b5cls, na)
+            array.push(seq_cd_buy_b5cls, na)
             array.push(seq_cd_buy_peak_th, na)
             array.push(seq_cd_buy_peak_tl, na)
 
             bool buy_inters_done = false
             if enable_sequential_countdown and enable_seq_intersection
-                if high[1] >= low[4]
-                    buy_inters_done := true
-                    float final_price = low[4] * (1 - intersection_line_offset)
-                    buy_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
-                else if high >= low[3]
-                    buy_inters_done := true
-                    float final_price = low[3] * (1 - intersection_line_offset)
-                    buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
-            array.push(cd_buy_inters, buy_inters_done)
+                for i = 4 to setup_len 
+                    if high[1] >=  low[i]
+                        buy_inters_done := true
+                        float final_price = low[i] * (1 - intersection_line_offset)
+                        buy_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                        break
+                if not buy_inters_done
+                    array.push(seq_cd_intersection_bar_9_checked, bar_index)
+                    for i = 3 to setup_len
+                        if high >= low[i]
+                            buy_inters_done := true
+                            float final_price = low[i] * (1 - intersection_line_offset)
+                            buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                            break
+                
+            array.push(seq_cd_buy_inters, buy_inters_done)
 
             // array.push(seq_cd_buy_ts, time)
             // Sell countdown risk level terminates at Buy Setup 9
@@ -299,21 +308,28 @@ if sel_cond
             sel_done := true
             array.push(cd_sel_cnts,  0)
             array.push(cd_sel_b8cls, na)
-            array.push(cd_sel_b5cls, na)
+            array.push(seq_cd_sel_b5cls, na)
             array.push(seq_cd_sel_peak_th, na)
             array.push(seq_cd_sel_peak_tl, na)
             
             bool sel_inters_done = false
             if enable_sequential_countdown and enable_seq_intersection
-                if low[1] <= high[4]
-                    sel_inters_done := true
-                    float final_price = high[4] * (1 + intersection_line_offset)
-                    sell_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
-                else if low <= high[3]
-                    sel_inters_done := true
-                    float final_price = high[3] * (1 + intersection_line_offset)
-                    sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
-            array.push(cd_sel_inters, sel_inters_done)
+                for i = 4 to setup_len
+                    if low[1] <= high[i]
+                        sel_inters_done := true
+                        float final_price = high[i] * (1 + intersection_line_offset)
+                        sell_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                        break
+                
+                if not sel_inters_done
+                    array.push(seq_cd_intersection_bar_9_checked, bar_index)
+                    for i = 3 to setup_len
+                        if low <= high[i]
+                            sel_inters_done := true
+                            float final_price = high[i] * (1 + intersection_line_offset)
+                            sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                            break
+            array.push(seq_cd_sel_inters, sel_inters_done)
 
             // array.push(cd_sel_ts,    time)
 
@@ -480,13 +496,16 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                 array.set(seq_cd_buy_peak_tl, i, true_low)
                 array.set(seq_cd_buy_peak_th, i, true_high)
         
-        if enable_seq_intersection and cnt == 0 and not array.get(cd_buy_inters, i)
-            if high >= low[3]
-                array.set(cd_buy_inters, i, true)
-                float final_price = low[3] * (1 - intersection_line_offset)
-                buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
-
-
+        if enable_seq_intersection and cnt == 0 and not array.get(seq_cd_buy_inters, i)
+            idx = array.indexof(seq_cd_intersection_bar_9_checked, bar_index)
+            if idx < 0
+                for seq_intersection_lookback = 3 to seq_intersection_cnt
+                    if high >= low[seq_intersection_lookback]
+                        array.set(seq_cd_buy_inters, i, true)
+                        float final_price = low[seq_intersection_lookback] * (1 - intersection_line_offset)
+                        buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                        break
+                        
         if cnt == 12
             float b8c = array.get(cd_buy_b8cls, i)
             // bar 13 candidate: only cd_term_val price qualifies; if it does, check condition 1 then remove
@@ -527,24 +546,24 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
 
                     array.remove(cd_buy_cnts,  i)
                     array.remove(cd_buy_b8cls, i)
-                    array.remove(cd_buy_b5cls, i)
+                    array.remove(seq_cd_buy_b5cls, i)
                     array.remove(seq_cd_buy_peak_th, i)
                     array.remove(seq_cd_buy_peak_tl, i)
-                    array.remove(cd_buy_inters, i)
+                    array.remove(seq_cd_buy_inters, i)
                     // array.remove(seq_cd_buy_ts,    i)
         else
-            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(cd_buy_inters, i)
+            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(seq_cd_buy_inters, i)
             // bool inters_ok = true
             if inters_ok
                 if cd_std_q
                     int new_cnt = cnt + 1
                     if new_cnt == 5
                         array.set(cd_buy_cnts, i, new_cnt)
-                        array.set(cd_buy_b5cls, i, close)
+                        array.set(seq_cd_buy_b5cls, i, close)
                     else if new_cnt == 8
                         bool set_buy_b8c = not enable_8_vs_5
                         if enable_8_vs_5
-                            float b5c = array.get(cd_buy_b5cls, i)
+                            float b5c = array.get(seq_cd_buy_b5cls, i)
                             set_buy_b8c := not na(b5c) and low <= b5c
                         
                         if set_buy_b8c
@@ -586,11 +605,15 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                 array.set(seq_cd_sel_peak_th, i, true_high)
                 array.set(seq_cd_sel_peak_tl, i, true_low)
         
-        if enable_seq_intersection and cnt == 0 and not array.get(cd_sel_inters, i)
-            if low <= high[3]
-                array.set(cd_sel_inters, i, true)
-                float final_price = high[3] * (1 + intersection_line_offset)
-                sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+        if enable_seq_intersection and cnt == 0 and not array.get(seq_cd_sel_inters, i)
+            idx = array.indexof(seq_cd_intersection_bar_9_checked, bar_index)
+            if idx < 0
+                for seq_intersection_lookback = 3 to seq_intersection_cnt
+                    if low <= high[seq_intersection_lookback]
+                        array.set(seq_cd_sel_inters, i, true)
+                        float final_price = high[seq_intersection_lookback] * (1 + intersection_line_offset)
+                        sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                        break
 
         if cnt == 12
             float b8c = array.get(cd_sel_b8cls, i)
@@ -629,25 +652,25 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                             
                     array.remove(cd_sel_cnts,  i)
                     array.remove(cd_sel_b8cls, i)
-                    array.remove(cd_sel_b5cls, i)
+                    array.remove(seq_cd_sel_b5cls, i)
                     array.remove(seq_cd_sel_peak_th, i)
                     array.remove(seq_cd_sel_peak_tl, i)
-                    array.remove(cd_sel_inters, i)
+                    array.remove(seq_cd_sel_inters, i)
         else
             // bars 1-12: standard close condition
-            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(cd_sel_inters, i)
+            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(seq_cd_sel_inters, i)
             // bool inters_ok = true
             if inters_ok
                 if cd_std_q
                     int new_cnt = cnt + 1
                     
                     if new_cnt == 5
-                        array.set(cd_sel_b5cls, i, close)
+                        array.set(seq_cd_sel_b5cls, i, close)
                         array.set(cd_sel_cnts, i, new_cnt)
                     else if new_cnt == 8
                         bool set_sell_b8c = not enable_8_vs_5
                         if enable_8_vs_5
-                            float b5c = array.get(cd_sel_b5cls, i)
+                            float b5c = array.get(seq_cd_sel_b5cls, i)
                             set_sell_b8c := not na(b5c) and high >= b5c
                         
                         if set_sell_b8c
