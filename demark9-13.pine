@@ -763,7 +763,7 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
 // On setup bar 9 (bar_index == start_bi): retroactive scan from bar 1 to bar 9.
 // On subsequent bars: evaluate current bar only.
 // // Multiple simultaneous countdowns run in parallel via indexed arrays.
-if enable_combo_countdown and combo_version == "Conservative" and array.size(combo_cd_buy_cnts) > 0
+if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_buy_cnts) > 0
     int i = array.size(combo_cd_buy_cnts) - 1
     while i >= 0
         int   cnt       = array.get(combo_cd_buy_cnts,     i)
@@ -789,7 +789,17 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
             bool c2 = false
             bool c3 = false
             bool c4 = false
-            if cnt == 12
+            if combo_version == "Standard" and cnt >= 10
+                // Bars 11-13: only need successively lower closes
+                float buy_cur = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.min(open[k], close[k]) : low[k] // only bar 13 specical
+                c1 := true
+                c2 := true
+                if cnt == 12
+                    c3 := buy_cur < prev_cls
+                else
+                    c3 := bk_close < prev_cls
+                c4 := true
+            else if cnt == 12
                 float buy_cur = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.min(open[k], close[k]) : low[k] //1. The close must be less than, or equal to, the low two price bars earlier (only bar 13 specical);
                 c1 := cd_compare == "With Equals" ? buy_cur <= low[k + 2] : buy_cur < low[k + 2]
                 c2 := cd_compare == "With Equals" ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
@@ -847,7 +857,12 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
 //2007-10-09, 2007-07-13, 2007-06-01 1987-01-12 2005-07-12, 2009-02-23, 2008-11-20,1995-11-03
 //2013-01-11, 2013-01-03, 2009-02-23 2005-03-07 2002-05-01 1998-12-30 1998-04-06 1998-02-05
 //2015-11-04, 2014-11-11,2012-09-14, 2007-10-01,2002-06-12,2002-06-03,2002-05-02, 1999-01-20, 1998-02-27,1990-07-13, 1990-06-13
-if enable_combo_countdown and combo_version == "Conservative" and array.size(combo_cd_sel_cnts) > 0
+// Standard mode:
+// Termination: Close: 090309, 20090223, 20081120, 20071005, 20070712, 20070530,
+// 
+// Termination: Open/close : 20121219， 20070601， 20050307，20040915， 19980205， 19970705， 19961126， 19950921， 19941209， 19940111， 1991114， 19910212， 19900925， 19900604， 19890420,19890201， 19890110， 19881024， 19870814
+//
+if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_sel_cnts) > 0
     int i = array.size(combo_cd_sel_cnts) - 1
     while i >= 0
         int   cnt      = array.get(combo_cd_sel_cnts,     i)
@@ -865,14 +880,23 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
                 array.set(combo_cd_sel_peak_th, i, k_th)
                 array.set(combo_cd_sel_peak_tl, i, k_tl)
 
-
             float bk_close = close[k]
             float bk_high  = high[k]
             bool  c1 = false
             bool c2 = false
             bool c3 = false
             bool c4 = false
-            if cnt == 12
+            if combo_version == "Standard" and cnt >= 10
+                // Bars 11-13: only need successively higher closes
+                float sell_cur   = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.max(open[k], close[k]) : high[k]
+                c1 := true
+                c2 := true
+                if cnt == 12
+                    c3 := sell_cur > prev_cls
+                else
+                    c3 := bk_close > prev_cls
+                c4 := true
+            else if cnt == 12
                 float sell_cur   = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.max(open[k], close[k]) : high[k]
                 c1 := cd_compare == "With Equals" ? sell_cur >= high[k + 2] : sell_cur > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier (only bar 13 specical);
                 c2 := cd_compare == "With Equals" ? bk_high  >= high[k + 1] : bk_high  > high[k + 1] 
