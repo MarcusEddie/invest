@@ -21,7 +21,6 @@ combo_cd_sell_color     = input.color(color.rgb(4, 4, 4),  "Sell", inline = "Com
 font_size = input.int(20, "Label Font Size", display = display.none)
 show_all_bars = input.string("Active only", "Show all counts", options=["Active only", "All"], display = display.none)//  setup和countdown公用这个
 
-
 setup_len = input.int(9, "Setup Length (min 9)", minval=9, group="Setup", display = display.none)
 setup_look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup", display = display.none)
 setup_use_equal = input.string("Without equal", "Setup comparison", options=["Without equal", "With equal"], group="Setup", display = display.none)
@@ -99,6 +98,15 @@ var line         seq_cd_risk_sel_ref_line = na
 var linefill     seq_cd_risk_buy_fill     = na
 var linefill     seq_cd_risk_sel_fill     = na
 
+var float        combo_cd_risk_buy_price = na
+var float        combo_cd_risk_sel_price = na
+var line         combo_cd_risk_buy_line  = na
+var line         combo_cd_risk_sel_line  = na
+var line         combo_cd_risk_buy_ref_line = na
+var line         combo_cd_risk_sel_ref_line = na
+var linefill     combo_cd_risk_buy_fill     = na
+var linefill     combo_cd_risk_sel_fill     = na
+
 // ── Countdown State (parallel arrays; one entry per active countdown) ─────────
 // Each Setup 9 pushes a new entry; countdowns run independently in parallel.
 var array<int>   cd_buy_cnts  = array.new<int>()    // current count per active buy countdown
@@ -127,6 +135,11 @@ var array<int>   combo_cd_sel_cnts     = array.new<int>()
 var array<float> combo_cd_sel_prev_cls = array.new<float>()
 var array<int>   combo_cd_sel_start_bi = array.new<int>()
 var array<int>   combo_cd_sel_b1_bi    = array.new<int>()
+
+var array<float> combo_cd_buy_peak_th = array.new<float>()
+var array<float> combo_cd_buy_peak_tl = array.new<float>()
+var array<float> combo_cd_sel_peak_th = array.new<float>()
+var array<float> combo_cd_sel_peak_tl = array.new<float>()
 
 // var float offset = 0.01
 var float offset = 0
@@ -202,6 +215,8 @@ if buy_cond
                 array.push(combo_cd_buy_prev_cls, na)
                 array.push(combo_cd_buy_start_bi, bar_index)
                 array.push(combo_cd_buy_b1_bi,    array.get(buy_bi, 0))
+                array.push(combo_cd_buy_peak_th,  na)
+                array.push(combo_cd_buy_peak_tl,  na)
 
             // array.push(seq_cd_buy_ts, time)
             // Sell countdown risk level terminates at Buy Setup 9
@@ -212,6 +227,13 @@ if buy_cond
             if not na(seq_cd_risk_sel_ref_line)
                 line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
                 seq_cd_risk_sel_ref_line := na
+            if not na(combo_cd_risk_sel_line)
+                line.set_x2(combo_cd_risk_sel_line, bar_index)
+                combo_cd_risk_sel_line  := na
+                combo_cd_risk_sel_price := na
+            if not na(combo_cd_risk_sel_ref_line)
+                line.set_x2(combo_cd_risk_sel_ref_line, bar_index)
+                combo_cd_risk_sel_ref_line := na
 
             // 判定 Perfected Buy: 8或9的Low < 6和7的Low
             lo6   = array.get(buy_lo, setup_len - 4)
@@ -353,6 +375,8 @@ if sel_cond
                 array.push(combo_cd_sel_prev_cls, na)
                 array.push(combo_cd_sel_start_bi, bar_index)
                 array.push(combo_cd_sel_b1_bi,    array.get(sel_bi, 0))
+                array.push(combo_cd_sel_peak_th,  na)
+                array.push(combo_cd_sel_peak_tl,  na)
             // array.push(cd_sel_ts,    time)
 
             // Buy countdown risk level terminates at Sell Setup 9
@@ -363,6 +387,13 @@ if sel_cond
             if not na(seq_cd_risk_buy_ref_line)
                 line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
                 seq_cd_risk_buy_ref_line := na
+            if not na(combo_cd_risk_buy_line)
+                line.set_x2(combo_cd_risk_buy_line, bar_index)
+                combo_cd_risk_buy_line  := na
+                combo_cd_risk_buy_price := na
+            if not na(combo_cd_risk_buy_ref_line)
+                line.set_x2(combo_cd_risk_buy_ref_line, bar_index)
+                combo_cd_risk_buy_ref_line := na
 
             // 判定 Perfected Sell: 8或9的High > 6和7的High
             hi6   = array.get(sel_hi, setup_len - 4)
@@ -500,6 +531,15 @@ if not na(seq_cd_risk_buy_line)
         seq_cd_risk_buy_line     := na
         seq_cd_risk_buy_ref_line := na
 
+if not na(combo_cd_risk_buy_line)
+    line.set_x2(combo_cd_risk_buy_line, bar_index)
+    if not na(combo_cd_risk_buy_ref_line)
+        line.set_x2(combo_cd_risk_buy_ref_line, bar_index)
+    if close < combo_cd_risk_buy_price
+        line.set_style(combo_cd_risk_buy_line, tdst_line_break_style)
+        combo_cd_risk_buy_line     := na
+        combo_cd_risk_buy_ref_line := na
+
 
 // ── Buy Countdown ─────────────────────────────────────────────────────────────
 // Each Buy Setup 9 pushes a new entry; all run in parallel.
@@ -610,6 +650,16 @@ if not na(seq_cd_risk_sel_line)
         line.set_style(seq_cd_risk_sel_line, tdst_line_break_style)
         seq_cd_risk_sel_line     := na
         seq_cd_risk_sel_ref_line := na
+
+if not na(combo_cd_risk_sel_line)
+    line.set_x2(combo_cd_risk_sel_line, bar_index)
+    if not na(combo_cd_risk_sel_ref_line)
+        line.set_x2(combo_cd_risk_sel_ref_line, bar_index)
+    if close > combo_cd_risk_sel_price
+        line.set_style(combo_cd_risk_sel_line, tdst_line_break_style)
+        combo_cd_risk_sel_line     := na
+        combo_cd_risk_sel_ref_line := na
+        
 // ── Sell Countdown ────────────────────────────────────────────────────────────
 // Each Sell Setup 9 pushes a new entry; all run in parallel.
 // Cancelled wholesale when a Buy Setup 9 completes.
@@ -724,6 +774,15 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
         int   scan_from = bar_index == start_bi ? bar_index - b1_bi : 0
         bool  completed = false
         for k = scan_from to 0
+            // Peak tracking: running-min true_low for risk level
+            float k_th = math.max(high[k], nz(close[k+1], high[k]))
+            float k_tl = math.min(low[k],  nz(close[k+1], low[k]))
+            float cur_peak_tl = array.get(combo_cd_buy_peak_tl, i)
+            if na(cur_peak_tl) or k_tl < cur_peak_tl
+                array.set(combo_cd_buy_peak_tl, i, k_tl)
+                array.set(combo_cd_buy_peak_th, i, k_th)
+
+
             float bk_close = close[k]
             float bk_low   = low[k]
             bool c1 = false
@@ -749,6 +808,26 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
                     buy_combo_bar_13_text_format = cd_label_bold == "Bold" ? text.format_bold : text.format_none
                     label.new(x = bar_index - k, y = low[k] * (1 - cd_offset), text = str.tostring(cd_bars), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = buy_combo_bar_13_text_format)
                     completed := true
+
+                    if enable_combo_risk_level or enable_combo_risk_zone
+                        float peak_th = array.get(combo_cd_buy_peak_th, i)
+                        float peak_tl = array.get(combo_cd_buy_peak_tl, i)
+                        if not na(peak_th) and not na(peak_tl)
+                            float rl = peak_tl - (peak_th - peak_tl)
+                            float final_combo_cd_buy_risk_level = rl * (1 - tdst_offset)
+                            combo_cd_risk_buy_price := rl
+                            if not na(combo_cd_risk_buy_line)
+                                line.set_x2(combo_cd_risk_buy_line, bar_index)
+                                line.set_extend(combo_cd_risk_buy_line, extend.none)
+                            color combo_buy_rl_color = enable_combo_risk_level ? combo_cd_buy_color : color.new(color.white, 100)
+                            combo_cd_risk_buy_line := line.new(bar_index, final_combo_cd_buy_risk_level, bar_index, final_combo_cd_buy_risk_level, extend=extend.none, color=combo_buy_rl_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_combo_risk_zone
+                                if not na(combo_cd_risk_buy_ref_line)
+                                    line.set_x2(combo_cd_risk_buy_ref_line, bar_index)
+                                    line.set_extend(combo_cd_risk_buy_ref_line, extend.none)
+                                combo_cd_risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                combo_cd_risk_buy_fill := linefill.new(combo_cd_risk_buy_ref_line, combo_cd_risk_buy_line, color=risk_buy_zone_color)
+
                     break
                 else if show_all_bars == "All"
                     label.new(x = bar_index - k, y = low[k] * (1 - cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size)
@@ -757,6 +836,8 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
             array.remove(combo_cd_buy_prev_cls, i)
             array.remove(combo_cd_buy_start_bi, i)
             array.remove(combo_cd_buy_b1_bi,    i)
+            array.remove(combo_cd_buy_peak_th,  i)
+            array.remove(combo_cd_buy_peak_tl,  i)
         else
             array.set(combo_cd_buy_cnts,     i, cnt)
             array.set(combo_cd_buy_prev_cls, i, prev_cls)
@@ -776,6 +857,15 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
         int   scan_from = bar_index == start_bi ? bar_index - b1_bi : 0
         bool  completed = false
         for k = scan_from to 0
+            // Peak tracking: running-max true_high for risk level
+            float k_th = math.max(high[k], nz(close[k+1], high[k]))
+            float k_tl = math.min(low[k],  nz(close[k+1], low[k]))
+            float cur_peak_th = array.get(combo_cd_sel_peak_th, i)
+            if na(cur_peak_th) or k_th > cur_peak_th
+                array.set(combo_cd_sel_peak_th, i, k_th)
+                array.set(combo_cd_sel_peak_tl, i, k_tl)
+
+
             float bk_close = close[k]
             float bk_high  = high[k]
             bool  c1 = false
@@ -802,6 +892,26 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
                     sell_combo_bar_13_text_format = cd_label_bold == "Bold" ? text.format_bold : text.format_none
                     label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cd_bars), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = sell_combo_bar_13_text_format)
                     completed := true
+                    if enable_combo_risk_level or enable_combo_risk_zone
+                        float peak_th = array.get(combo_cd_sel_peak_th, i)
+                        float peak_tl = array.get(combo_cd_sel_peak_tl, i)
+                        if not na(peak_th) and not na(peak_tl)
+                            float rl = peak_th + (peak_th - peak_tl)
+                            float final_combo_cd_sell_risk_level = rl * (1 + tdst_offset)
+                            combo_cd_risk_sel_price := rl
+                            if not na(combo_cd_risk_sel_line)
+                                line.set_x2(combo_cd_risk_sel_line, bar_index)
+                                line.set_extend(combo_cd_risk_sel_line, extend.none)
+                            color combo_sell_rl_color = enable_combo_risk_level ? combo_cd_sell_color : color.new(color.white, 100)
+                            combo_cd_risk_sel_line := line.new(bar_index, final_combo_cd_sell_risk_level, bar_index, final_combo_cd_sell_risk_level, extend=extend.none, color=combo_sell_rl_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_combo_risk_zone
+                                if not na(combo_cd_risk_sel_ref_line)
+                                    line.set_x2(combo_cd_risk_sel_ref_line, bar_index)
+                                    line.set_extend(combo_cd_risk_sel_ref_line, extend.none)
+                                combo_cd_risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                combo_cd_risk_sel_fill := linefill.new(combo_cd_risk_sel_line, combo_cd_risk_sel_ref_line, color=color.new(combo_cd_sell_color, 90))
+
+
                     break
                 else if show_all_bars == "All"
                     label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size)
@@ -810,6 +920,8 @@ if enable_combo_countdown and combo_version == "Conservative" and array.size(com
             array.remove(combo_cd_sel_prev_cls, i)
             array.remove(combo_cd_sel_start_bi, i)
             array.remove(combo_cd_sel_b1_bi,    i)
+            array.remove(combo_cd_sel_peak_th,  i)
+            array.remove(combo_cd_sel_peak_tl,  i)
         else
             array.set(combo_cd_sel_cnts,     i, cnt)
             array.set(combo_cd_sel_prev_cls, i, prev_cls)
