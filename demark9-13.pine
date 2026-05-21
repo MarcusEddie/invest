@@ -1,6 +1,8 @@
 //@version=6
 indicator("TD-Claude", overlay=true, max_labels_count=500, max_lines_count=500, max_bars_back=5000, behind_chart = false)
 
+// plotshape(high < high[1], style=shape.diamond, location=location.belowbar, color=color.black, size=size.small)
+
 // ── Inputs ────────────────────────────────────────────────────────────────────
 enable_setup  = input.bool(false,         "Setup", inline="setup_row", display = display.none)
 setup_buy_color     = input.color(color.rgb(199, 146, 248), "Buy", inline="setup_row", display = display.none)
@@ -171,6 +173,10 @@ time_to_yyyymmdd(int cur_bar_time) =>
 // ── True High / True Low ─────────────────────────────────────────────────────
 true_high = math.max(high, nz(close[1], high))
 true_low  = math.min(low,  nz(close[1], low))
+
+// 
+// if enable_print_log(time, 2025, 04, 21, ">=") and enable_print_log(time, 2025, 05, 15, "<=")
+//     log.info("["+str.tostring(open) + ", " + str.tostring(high) + ", " + str.tostring(low) + ", " + str.tostring(close)+",  ]")
 
 // ── Buy Setup ────────────────────────────────────────────────────────────────
 //2001年3-20， 202-04-16，2022-08-05，2025-07-07，2025-12-04， SPX intersection
@@ -763,7 +769,8 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
 // On setup bar 9 (bar_index == start_bi): retroactive scan from bar 1 to bar 9.
 // On subsequent bars: evaluate current bar only.
 // // Multiple simultaneous countdowns run in parallel via indexed arrays.
-if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_buy_cnts) > 0
+// if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_buy_cnts) > 0
+if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
     int i = array.size(combo_cd_buy_cnts) - 1
     while i >= 0
         int   cnt       = array.get(combo_cd_buy_cnts,     i)
@@ -789,16 +796,9 @@ if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo
             bool c2 = false
             bool c3 = false
             bool c4 = false
-            if combo_version == "Standard" and cnt >= 10
-                // Bars 11-13: only need successively lower closes
-                float buy_cur = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.min(open[k], close[k]) : low[k] // only bar 13 specical
-                c1 := true
-                c2 := true
-                if cnt == 12
-                    c3 := buy_cur < prev_cls
-                else
-                    c3 := bk_close < prev_cls
-                c4 := true
+
+            if combo_version == "Aggressive"
+                int placeholder = 1
             else if cnt == 12
                 float buy_cur = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.min(open[k], close[k]) : low[k] //1. The close must be less than, or equal to, the low two price bars earlier (only bar 13 specical);
                 c1 := cd_compare == "With Equals" ? buy_cur <= low[k + 2] : buy_cur < low[k + 2]
@@ -810,6 +810,12 @@ if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo
                 c2 := cd_compare == "With Equals" ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
                 c3 := na(prev_cls) or bk_close < prev_cls
                 c4 := bk_close < close[k + 1]
+            
+            if combo_version == "Standard" and cnt >= 10 // Bars 11-13: only need successively higher closes
+                c1 := true
+                c2 := true
+                c4 := true
+            
             
             if c1 and c2 and c3 and c4
                 cnt     += 1
@@ -862,7 +868,8 @@ if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo
 // 
 // Termination: Open/close : 20121219， 20070601， 20050307，20040915， 19980205， 19970705， 19961126， 19950921， 19941209， 19940111， 1991114， 19910212， 19900925， 19900604， 19890420,19890201， 19890110， 19881024， 19870814
 //
-if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_sel_cnts) > 0
+// if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_sel_cnts) > 0
+if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
     int i = array.size(combo_cd_sel_cnts) - 1
     while i >= 0
         int   cnt      = array.get(combo_cd_sel_cnts,     i)
@@ -886,29 +893,27 @@ if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo
             bool c2 = false
             bool c3 = false
             bool c4 = false
-            if combo_version == "Standard" and cnt >= 10
-                // Bars 11-13: only need successively higher closes
-                float sell_cur   = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.max(open[k], close[k]) : high[k]
-                c1 := true
-                c2 := true
-                if cnt == 12
-                    c3 := sell_cur > prev_cls
-                else
-                    c3 := bk_close > prev_cls
-                c4 := true
+            
+            if combo_version == "Aggressive"
+                int placeholder = 1
             else if cnt == 12
                 float sell_cur   = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.max(open[k], close[k]) : high[k]
                 c1 := cd_compare == "With Equals" ? sell_cur >= high[k + 2] : sell_cur > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier (only bar 13 specical);
                 c2 := cd_compare == "With Equals" ? bk_high  >= high[k + 1] : bk_high  > high[k + 1] 
                 c3 := sell_cur > prev_cls
                 c4 := sell_cur > close[k + 1]
-
             else
                 c1 := cd_compare == "With Equals" ? bk_close >= high[k + 2] :  bk_close > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier;
                 c2 := cd_compare == "With Equals" ? bk_high  >= high[k + 1] : bk_high  > high[k + 1]
                 c3 := na(prev_cls) or bk_close > prev_cls
                 c4 := bk_close > close[k + 1]
-
+            
+            if combo_version == "Standard" and cnt >= 10 // Bars 11-13: only need successively higher closes
+                c1 := true
+                c2 := true
+                c4 := true
+            
+        
             if c1 and c2 and c3 and c4
                 cnt     += 1
                 prev_cls := bk_close
