@@ -2,7 +2,18 @@
 indicator("TD-Claude", overlay=true, max_labels_count=500, max_lines_count=500, max_bars_back=5000, behind_chart = false)
 
 // plotshape(high < high[1], style=shape.diamond, location=location.belowbar, color=color.black, size=size.small)
-
+var string ENABLE_SHOW_ALL_BAR_Y = "All"
+var string ENABLE_SHOW_ALL_BAR_N = "Active only"
+var string COMPARE_WITH_EQUAL = "With equal"
+var string COMPARE_NO_EQUAL = "Without equal"
+var string LABEL_BOLD = "Bold"
+var string LABEL_NORMAL = "Normal"
+var string PRICE_CLOSE = "Close"
+var string PRICE_LOW_HIGH = "Low High"
+var string PRICE_OPEN_CLOSE = "Open or Close"
+var string COMBO_AGGRESSIVE = "Aggressive"
+var string COMBO_STANDARD = "Standard"
+var string COMBO_CONSERVATIVE = "Conservative"
 // ── Inputs ────────────────────────────────────────────────────────────────────
 enable_setup  = input.bool(false,         "Setup", inline="setup_row", display = display.none)
 setup_buy_color     = input.color(color.rgb(199, 146, 248), "Buy", inline="setup_row", display = display.none)
@@ -21,12 +32,12 @@ combo_cd_buy_color      = input.color(color.rgb(4, 4, 4),  "Buy",  inline = "Com
 combo_cd_sell_color     = input.color(color.rgb(4, 4, 4),  "Sell", inline = "Combo_countdown_row", display = display.none)
 
 font_size = input.int(20, "Label Font Size", display = display.none)
-show_all_bars = input.string("Active only", "Show all counts", options=["Active only", "All"], display = display.none)//  setup和countdown公用这个
+show_all_bars = input.string(ENABLE_SHOW_ALL_BAR_N, "Show all counts", options=[ENABLE_SHOW_ALL_BAR_N, ENABLE_SHOW_ALL_BAR_Y], display = display.none)//  setup和countdown公用这个
 
 setup_len = input.int(9, "Setup Length (min 9)", minval=9, group="Setup", display = display.none)
 setup_look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup", display = display.none)
-setup_use_equal = input.string("Without equal", "Setup comparison", options=["Without equal", "With equal"], group="Setup", display = display.none)
-label_bold = input.string("Bold", "Label Style", options=["Bold", "Normal"], group="Setup", display = display.none)
+setup_use_equal = input.string(COMPARE_NO_EQUAL, "Setup comparison", options=[COMPARE_NO_EQUAL, COMPARE_WITH_EQUAL], group="Setup", display = display.none)
+label_bold = input.string(LABEL_BOLD, "Label Style", options=[LABEL_BOLD, LABEL_NORMAL], group="Setup", display = display.none)
 enable_perfect_setup = input.bool(false,        "Enable perfect setup", group="Setup", display = display.none)
 enable_risk_level  = input.bool(false, "Enable Risk Level", group="Setup", display = display.none)
 enable_risk_zone      = input.bool(false, "Enable Risk Level Zone",  group="Setup", display = display.none)
@@ -39,10 +50,10 @@ risk_sel_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Sell Zone
 
 cd_bars           = input.int(13,        "Bars to Countdown",             minval=1, group="Countdown (shared)", display = display.none)
 cd_look_back      = input.int(2,         "Bars to Look Back",             minval=1, group="Countdown (shared)", display = display.none)
-cd_comp_val       = input.string("Close",       "Countdown Comparison Value",    options=["Close", "Low/High"],                          group="Countdown (shared)", display = display.none)
-cd_term_val       = input.string("Open or Close",    "Termination Count Price Value", options=["Open or Close", "Close", "Low/High"],          group="Countdown (shared)", display = display.none)
-cd_compare        = input.string("With Equals", "Countdown Compare",            options=["With Equals", "Without Equals"],               group="Countdown (shared)", display = display.none)
-cd_label_bold = input.string("Bold", "Label Style", options=["Bold", "Normal"], group="Countdown (shared)", display = display.none)
+cd_comp_val       = input.string(PRICE_CLOSE,       "Countdown Comparison Value",    options=[PRICE_CLOSE, PRICE_LOW_HIGH],                          group="Countdown (shared)", display = display.none)
+cd_term_val       = input.string(PRICE_OPEN_CLOSE,    "Termination Count Price Value", options=[PRICE_OPEN_CLOSE, PRICE_CLOSE, PRICE_LOW_HIGH],          group="Countdown (shared)", display = display.none)
+cd_compare        = input.string(COMPARE_WITH_EQUAL, "Countdown Compare",            options=[COMPARE_WITH_EQUAL, COMPARE_NO_EQUAL],               group="Countdown (shared)", display = display.none)
+cd_label_bold = input.string(LABEL_BOLD, "Label Style", options=[LABEL_BOLD, LABEL_NORMAL], group="Countdown (shared)", display = display.none)
 
 enable_seq_intersection = input.bool(false,                      "Enable Intersection",       group="Sequential Countdown", display = display.none)
 seq_intersection_cnt = input.int(13,                      "Intersection Lookback Bars",       group="Sequential Countdown", display = display.none)
@@ -51,7 +62,7 @@ enable_13_vs_8 = input.bool(false,                      "Last vs 8 qualifier",  
 enable_seq_risk_level = input.bool(false,                      "Enable Risk Level",       group="Sequential Countdown", display = display.none)
 enable_seq_risk_zone = input.bool(false,                      "Enable Risk Level Zone",       group="Sequential Countdown", display = display.none)
 
-combo_version = input.string("Standard", "Combo version", options=["Standard", "Aggressive", "Conservative"], group="Combo Countdown",display = display.none)
+combo_version = input.string(COMBO_STANDARD, "Combo version", options=[COMBO_STANDARD, COMBO_AGGRESSIVE, COMBO_CONSERVATIVE], group="Combo Countdown",display = display.none)
 enable_combo_risk_level = input.bool(false,                      "Enable Risk Level",       group="Combo Countdown", display = display.none)
 enable_combo_risk_zone = input.bool(false,                      "Enable Risk Level Zone",       group="Combo Countdown", display = display.none)
 
@@ -180,7 +191,7 @@ true_low  = math.min(low,  nz(close[1], low))
 
 // ── Buy Setup ────────────────────────────────────────────────────────────────
 //2001年3-20， 202-04-16，2022-08-05，2025-07-07，2025-12-04， SPX intersection
-buy_cond = setup_use_equal == "With equal" ? close <= close[setup_look_back] : close < close[setup_look_back]
+buy_cond = setup_use_equal == COMPARE_WITH_EQUAL ? close <= close[setup_look_back] : close < close[setup_look_back]
 if buy_cond
     if not buy_done
         buy_cnt += 1
@@ -251,7 +262,7 @@ if buy_cond
                 isBuyPerfected := true
 
             
-            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1
+            for i = (show_all_bars == ENABLE_SHOW_ALL_BAR_N ? setup_len - 1 : 0) to setup_len - 1
                 if i == setup_len - 1
                     string label_txt = na
                     if enable_setup and enable_perfect_setup
@@ -269,7 +280,7 @@ if buy_cond
                             label_txt := '▲'
                             label_txt
                     if not na(label_txt)
-                        if label_bold == "Bold"
+                        if label_bold == LABEL_BOLD
                             buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_bold)
                              
                         else
@@ -340,7 +351,7 @@ if buy_perf_wait and low <= buy_perf_ref
     buy_perf_wait := false
 
 // ── Sell Setup ───────────────────────────────────────────────────────────────
-sel_cond = setup_use_equal == "With equal" ? close >= close[setup_look_back] : close > close[setup_look_back]
+sel_cond = setup_use_equal == COMPARE_WITH_EQUAL ? close >= close[setup_look_back] : close > close[setup_look_back]
 if sel_cond
     if not sel_done
         sel_cnt += 1
@@ -410,7 +421,7 @@ if sel_cond
             if hi8 >= max67 or hi9 >= max67
                 isSellPerfected := true
             
-            for i = (show_all_bars == "Active only" ? setup_len - 1 : 0) to setup_len - 1 
+            for i = (show_all_bars == ENABLE_SHOW_ALL_BAR_N ? setup_len - 1 : 0) to setup_len - 1 
                 if i == setup_len - 1
                     string label_txt = na
                     if enable_setup and enable_perfect_setup
@@ -428,7 +439,7 @@ if sel_cond
                             label_txt := '▼'
                             label_txt
                     if not na(label_txt)
-                        if label_bold == "Bold"
+                        if label_bold == LABEL_BOLD
                             sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_bold)
                         else
                             sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
@@ -552,9 +563,9 @@ if not na(combo_cd_risk_buy_line)
 // Cancelled wholesale when a Sell Setup 9 completes.
 // Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
 if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
-    float buy_cur   = cd_term_val == "Close" ? close : cd_term_val == "Open or Close" ? math.min(open, close) : low
-    bool  cd_term_q = cd_compare == "With Equals" ? buy_cur <= low[cd_look_back] : buy_cur < low[cd_look_back]
-    bool  cd_std_q  = cd_compare == "With Equals" ? close   <= low[cd_look_back] : close   < low[cd_look_back]
+    float buy_cur   = cd_term_val == PRICE_CLOSE ? close : cd_term_val == PRICE_OPEN_CLOSE ? math.min(open, close) : low
+    bool  cd_term_q = cd_compare == COMPARE_WITH_EQUAL ? buy_cur <= low[cd_look_back] : buy_cur < low[cd_look_back]
+    bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   <= low[cd_look_back] : close   < low[cd_look_back]
     int i = array.size(cd_buy_cnts) - 1
     while i >= 0
         int cnt = array.get(cd_buy_cnts, i)
@@ -590,7 +601,7 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                     string start_time = time_to_yyyymmdd(array.get(seq_cd_buy_ts, i))
                     // label_13_txt = "13" + "\n" + start_time
                     label_13_txt = "13"
-                    buy_seq_bar_13_text_format = cd_label_bold == "Bold" ? text.format_bold : text.format_none
+                    buy_seq_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
                     buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = label_13_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = buy_seq_bar_13_text_format)
                     
                     if enable_seq_risk_level or enable_seq_risk_zone
@@ -641,7 +652,7 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                     else
                         array.set(cd_buy_cnts, i, new_cnt)
         i -= 1
-    if show_all_bars == "All" and cd_std_q and array.size(cd_buy_cnts) > 0
+    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(cd_buy_cnts) > 0
         int    last_i    = array.size(cd_buy_cnts) - 1
         int    last_cnt  = array.get(cd_buy_cnts, last_i)
         // if enable_print_log(time, 2022, 03, 16, "<=") and enable_print_log(time, 2022, 01, 24, ">=")
@@ -671,9 +682,9 @@ if not na(combo_cd_risk_sel_line)
 // Cancelled wholesale when a Buy Setup 9 completes.
 // Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
 if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
-    float sel_cur   = cd_term_val == "Close" ? close : cd_term_val == "Open or Close" ? math.max(open, close) : high
-    bool  cd_term_q = cd_compare == "With Equals" ? sel_cur >= high[cd_look_back] : sel_cur > high[cd_look_back]
-    bool  cd_std_q  = cd_compare == "With Equals" ? close   >= high[cd_look_back] : close   > high[cd_look_back]
+    float sel_cur   = cd_term_val == PRICE_CLOSE ? close : cd_term_val == PRICE_OPEN_CLOSE ? math.max(open, close) : high
+    bool  cd_term_q = cd_compare == COMPARE_WITH_EQUAL ? sel_cur >= high[cd_look_back] : sel_cur > high[cd_look_back]
+    bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   >= high[cd_look_back] : close   > high[cd_look_back]
     int i = array.size(cd_sel_cnts) - 1
     while i >= 0
         int cnt = array.get(cd_sel_cnts, i)
@@ -707,7 +718,7 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                 
                 if add_label
                     label_13_text = "13"
-                    sell_seq_bar_13_text_format = cd_label_bold == "Bold" ? text.format_bold : text.format_none
+                    sell_seq_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
                     sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = label_13_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = sell_seq_bar_13_text_format)
                     
                     if enable_seq_risk_level or enable_seq_risk_zone
@@ -759,10 +770,11 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                     else
                         array.set(cd_sel_cnts, i, new_cnt)
         i -= 1
-    if show_all_bars == "All" and cd_std_q and array.size(cd_sel_cnts) > 0
+    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(cd_sel_cnts) > 0
         int    last_i   = array.size(cd_sel_cnts) - 1
         int    last_cnt = array.get(cd_sel_cnts, last_i)
         sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
+
 
 
 // ── Combo Buy Countdown ───────────────────────────────────────────────────────
@@ -777,8 +789,8 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
         float prev_cls  = array.get(combo_cd_buy_prev_cls, i)
         int   start_bi  = array.get(combo_cd_buy_start_bi, i) // bar 9 index
         int   b1_bi     = array.get(combo_cd_buy_b1_bi,    i) // bar 1 index
-
         int   scan_from = bar_index == start_bi ? bar_index - b1_bi : 0
+
         bool  completed = false
         for k = scan_from to 0
             // Peak tracking: running-min true_low for risk level
@@ -791,38 +803,44 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
 
 
             float bk_close = close[k]
+
             float bk_low   = low[k]
+
             bool c1 = false
             bool c2 = false
             bool c3 = false
             bool c4 = false
 
-            if combo_version == "Aggressive"
+            if combo_version == COMBO_AGGRESSIVE
                 int placeholder = 1
             else if cnt == 12
-                float buy_cur = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.min(open[k], close[k]) : low[k] //1. The close must be less than, or equal to, the low two price bars earlier (only bar 13 specical);
-                c1 := cd_compare == "With Equals" ? buy_cur <= low[k + 2] : buy_cur < low[k + 2]
-                c2 := cd_compare == "With Equals" ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
+                float buy_cur = cd_term_val == PRICE_CLOSE ? close[k] : cd_term_val == PRICE_OPEN_CLOSE ? math.min(open[k], close[k]) : low[k] //1. The close must be less than, or equal to, the low two price bars earlier (only bar 13 specical);
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? buy_cur <= low[k + 2] : buy_cur < low[k + 2]
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
+                // c2 := bk_low   < low[k + 1]
                 c3 := buy_cur < prev_cls
                 c4 := buy_cur < close[k + 1]
             else
-                c1 := cd_compare == "With Equals" ? bk_close <= low[k + 2] : bk_close < low[k + 2] //1. The close must be less than, or equal to, the low two price bars earlier;
-                c2 := cd_compare == "With Equals" ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? bk_close <= low[k + 2] : bk_close < low[k + 2] //1. The close must be less than, or equal to, the low two price bars earlier;
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
+                // c2 := bk_low   <= low[k + 1]
                 c3 := na(prev_cls) or bk_close < prev_cls
                 c4 := bk_close < close[k + 1]
             
-            if combo_version == "Standard" and cnt >= 10 // Bars 11-13: only need successively higher closes
+            if combo_version == COMBO_STANDARD and cnt >= 10 // Bars 11-13: only need successively higher closes
                 c1 := true
                 c2 := true
-                c4 := true
+                // c3 := true
             
             
             if c1 and c2 and c3 and c4
                 cnt     += 1
                 prev_cls := bk_close
                 if cnt == cd_bars
-                    buy_combo_bar_13_text_format = cd_label_bold == "Bold" ? text.format_bold : text.format_none
-                    label.new(x = bar_index - k, y = low[k] * (1 - cd_offset), text = str.tostring(cd_bars), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = buy_combo_bar_13_text_format)
+                    buy_combo_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
+                    string label_txt = str.tostring(cd_bars)
+                    label_txt :=str.tostring(cd_bars)
+                    label.new(x = bar_index - k, y = low[k] * (1 - cd_offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = buy_combo_bar_13_text_format)
                     completed := true
 
                     if enable_combo_risk_level or enable_combo_risk_zone
@@ -845,8 +863,9 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
                                 combo_cd_risk_buy_fill := linefill.new(combo_cd_risk_buy_ref_line, combo_cd_risk_buy_line, color=risk_buy_zone_color)
 
                     break
-                else if show_all_bars == "All"
-                    label.new(x = bar_index - k, y = low[k] * (1 - cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size)
+                else if show_all_bars == ENABLE_SHOW_ALL_BAR_Y
+                    int ttt = 1
+                    label.new(x = bar_index - k, y = low[k] * (1 - 10*cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size)
         if completed
             array.remove(combo_cd_buy_cnts,     i)
             array.remove(combo_cd_buy_prev_cls, i)
@@ -854,6 +873,7 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
             array.remove(combo_cd_buy_b1_bi,    i)
             array.remove(combo_cd_buy_peak_th,  i)
             array.remove(combo_cd_buy_peak_tl,  i)
+
         else
             array.set(combo_cd_buy_cnts,     i, cnt)
             array.set(combo_cd_buy_prev_cls, i, prev_cls)
@@ -894,21 +914,21 @@ if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
             bool c3 = false
             bool c4 = false
             
-            if combo_version == "Aggressive"
+            if combo_version == COMBO_AGGRESSIVE
                 int placeholder = 1
             else if cnt == 12
-                float sell_cur   = cd_term_val == "Close" ? close[k] : cd_term_val == "Open or Close" ? math.max(open[k], close[k]) : high[k]
-                c1 := cd_compare == "With Equals" ? sell_cur >= high[k + 2] : sell_cur > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier (only bar 13 specical);
-                c2 := cd_compare == "With Equals" ? bk_high  >= high[k + 1] : bk_high  > high[k + 1] 
+                float sell_cur   = cd_term_val == PRICE_CLOSE ? close[k] : cd_term_val == PRICE_OPEN_CLOSE ? math.max(open[k], close[k]) : high[k]
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? sell_cur >= high[k + 2] : sell_cur > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier (only bar 13 specical);
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_high  >= high[k + 1] : bk_high  > high[k + 1] 
                 c3 := sell_cur > prev_cls
                 c4 := sell_cur > close[k + 1]
             else
-                c1 := cd_compare == "With Equals" ? bk_close >= high[k + 2] :  bk_close > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier;
-                c2 := cd_compare == "With Equals" ? bk_high  >= high[k + 1] : bk_high  > high[k + 1]
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? bk_close >= high[k + 2] :  bk_close > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier;
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_high  >= high[k + 1] : bk_high  > high[k + 1]
                 c3 := na(prev_cls) or bk_close > prev_cls
                 c4 := bk_close > close[k + 1]
             
-            if combo_version == "Standard" and cnt >= 10 // Bars 11-13: only need successively higher closes
+            if combo_version == COMBO_STANDARD and cnt >= 10 // Bars 11-13: only need successively higher closes
                 c1 := true
                 c2 := true
                 c4 := true
@@ -918,7 +938,7 @@ if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
                 cnt     += 1
                 prev_cls := bk_close
                 if cnt == cd_bars
-                    sell_combo_bar_13_text_format = cd_label_bold == "Bold" ? text.format_bold : text.format_none
+                    sell_combo_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
                     label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cd_bars), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = sell_combo_bar_13_text_format)
                     completed := true
                     if enable_combo_risk_level or enable_combo_risk_zone
@@ -942,7 +962,8 @@ if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
 
 
                     break
-                else if show_all_bars == "All"
+                else if show_all_bars == ENABLE_SHOW_ALL_BAR_Y
+                    int x = 1
                     label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size)
         if completed
             array.remove(combo_cd_sel_cnts,     i)
