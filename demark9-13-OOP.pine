@@ -120,25 +120,22 @@ var line         combo_cd_risk_sel_ref_line = na
 var linefill     combo_cd_risk_buy_fill     = na
 var linefill     combo_cd_risk_sel_fill     = na
 
+type CountdownState
+    int type // sequential=1, combo=0
+    int direction        // sell=1, buy=0
+    int count
+    float bar8C
+    float bar5C
+    float peakTrueHigh 
+    float peakTrueLow
+    bool intersectionStatus
+
 // ── Countdown State (parallel arrays; one entry per active countdown) ─────────
-// Each Setup 9 pushes a new entry; countdowns run independently in parallel.
-var array<int>   cd_buy_cnts  = array.new<int>()    // current count per active buy countdown
-var array<int>   cd_sel_cnts  = array.new<int>()    // current count per active sell countdown
-var array<float> cd_buy_b8cls = array.new<float>()  // bar-8 close per active buy countdown
-var array<float> cd_sel_b8cls = array.new<float>()  // bar-8 close per active sell countdown
 var array<int>   seq_cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
 var array<int>   cd_sel_ts    = array.new<int>()     // bar-9 start timestamp per active sell countdown
-var array<float> seq_cd_buy_b5cls = array.new<float>()  // bar-5 close per active buy countdown (8vs5 qualifier)
-var array<float> seq_cd_sel_b5cls = array.new<float>()  // bar-5 close per active sell countdown (8vs5 qualifier)
-
-var array<float> seq_cd_sel_peak_th = array.new<float>()  // running-max true high per active sell countdown
-var array<float> seq_cd_sel_peak_tl = array.new<float>()  // true low of the bar that set the running-max true high
-
-var array<float> seq_cd_buy_peak_th = array.new<float>()  // true high of the bar that set the running-min true low
-var array<float> seq_cd_buy_peak_tl = array.new<float>()  // running-min true low per active buy countdown
-var array<bool>  seq_cd_buy_inters      = array.new<bool>()   // intersection satisfied per active buy countdown
-var array<bool>  seq_cd_sel_inters      = array.new<bool>()   // intersection satisfied per active sell countdown
 var array<int> seq_cd_intersection_bar_9_checked = array.new<int>()
+var array<CountdownState> seqBuyCountdownQueue = array.new<CountdownState>()
+var array<CountdownState> seqSellCountdownQueue = array.new<CountdownState>()
 
 var array<int>   combo_cd_buy_cnts     = array.new<int>()
 var array<float> combo_cd_buy_prev_cls = array.new<float>()
@@ -202,17 +199,14 @@ if buy_cond
 
         if buy_cnt == setup_len
             buy_done := true
-            array.push(cd_buy_cnts,  0)
-            array.push(cd_buy_b8cls, na)
-            array.push(seq_cd_buy_b5cls, na)
-            array.push(seq_cd_buy_peak_th, na)
-            array.push(seq_cd_buy_peak_tl, na)
-
+            seqBuyCountdown = CountdownState.new(type=1, direction=0, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false) 
+            
             bool buy_inters_done = false
             if enable_sequential_countdown and enable_seq_intersection
                 for i = 4 to setup_len 
                     if high[1] >=  low[i]
                         buy_inters_done := true
+                        seqBuyCountdown.intersectionStatus := true
                         float final_price = low[i] * (1 - intersection_line_offset)
                         buy_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
                         break
@@ -221,11 +215,12 @@ if buy_cond
                     for i = 3 to setup_len
                         if high >= low[i]
                             buy_inters_done := true
+                            seqBuyCountdown.intersectionStatus := true
                             float final_price = low[i] * (1 - intersection_line_offset)
                             buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
                             break
                 
-            array.push(seq_cd_buy_inters, buy_inters_done)
+            array.push(seqBuyCountdownQueue, seqBuyCountdown)
             
             if enable_combo_countdown
                 array.push(combo_cd_buy_cnts,     0)
@@ -362,17 +357,14 @@ if sel_cond
 
         if sel_cnt == setup_len
             sel_done := true
-            array.push(cd_sel_cnts,  0)
-            array.push(cd_sel_b8cls, na)
-            array.push(seq_cd_sel_b5cls, na)
-            array.push(seq_cd_sel_peak_th, na)
-            array.push(seq_cd_sel_peak_tl, na)
+            seqSellCountdown = CountdownState.new(type=1, direction=1, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false) 
 
             bool sel_inters_done = false
             if enable_sequential_countdown and enable_seq_intersection
                 for i = 4 to setup_len
                     if low[1] <= high[i]
                         sel_inters_done := true
+                        seqSellCountdown.intersectionStatus := true
                         float final_price = high[i] * (1 + intersection_line_offset)
                         sell_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
                         break
@@ -382,11 +374,12 @@ if sel_cond
                     for i = 3 to setup_len
                         if low <= high[i]
                             sel_inters_done := true
+                            seqSellCountdown.intersectionStatus := true
                             float final_price = high[i] * (1 + intersection_line_offset)
                             sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
                             break
-            array.push(seq_cd_sel_inters, sel_inters_done)
-            
+
+            array.push(seqSellCountdownQueue, seqSellCountdown)
             if enable_combo_countdown
                 array.push(combo_cd_sel_cnts,     0)
                 array.push(combo_cd_sel_prev_cls, na)
@@ -562,7 +555,7 @@ if not na(combo_cd_risk_buy_line)
 // Each Buy Setup 9 pushes a new entry; all run in parallel.
 // Cancelled wholesale when a Sell Setup 9 completes.
 // Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
-if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
+if enable_sequential_countdown and array.size(seqBuyCountdownQueue) > 0
     bool use_aggressive_mode = cd_comp_val == PRICE_LOW_HIGH
     float buy_cur   = cd_term_val == PRICE_CLOSE ? close : cd_term_val == PRICE_OPEN_CLOSE ? math.min(open, close) : low
     if use_aggressive_mode
@@ -571,27 +564,27 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
     float std_compare_val = use_aggressive_mode ? low : close
     // bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   <= low[cd_look_back] : close   < low[cd_look_back]
     bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? std_compare_val   <= low[cd_look_back] : std_compare_val   < low[cd_look_back]
-    int i = array.size(cd_buy_cnts) - 1
-    while i >= 0
-        int cnt = array.get(cd_buy_cnts, i)
-        if (cnt > 0) or (cnt == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
-            float cur_peak = array.get(seq_cd_buy_peak_tl, i)
-            if na(cur_peak) or true_low < cur_peak
-                array.set(seq_cd_buy_peak_tl, i, true_low)
-                array.set(seq_cd_buy_peak_th, i, true_high)
+    int qIdx = array.size(seqBuyCountdownQueue) - 1
+    while qIdx >= 0
+        CountdownState buySeqCountdown = array.get(seqBuyCountdownQueue, qIdx)
+        if (buySeqCountdown.count > 0) or (buySeqCountdown.count == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
+            if na(buySeqCountdown.peakTrueLow) or true_low < buySeqCountdown.peakTrueLow
+                buySeqCountdown.peakTrueLow := true_low
+                buySeqCountdown.peakTrueHigh := true_high
+
         
-        if enable_seq_intersection and cnt == 0 and not array.get(seq_cd_buy_inters, i)
+        if enable_seq_intersection and buySeqCountdown.count == 0 and not buySeqCountdown.intersectionStatus
             idx = array.indexof(seq_cd_intersection_bar_9_checked, bar_index)
             if idx < 0
                 for seq_intersection_lookback = 3 to seq_intersection_cnt
                     if high >= low[seq_intersection_lookback]
-                        array.set(seq_cd_buy_inters, i, true)
+                        buySeqCountdown.intersectionStatus := true
                         float final_price = low[seq_intersection_lookback] * (1 - intersection_line_offset)
                         buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
                         break
 
-        if cnt == cd_bars - 1
-            float b8c = array.get(cd_buy_b8cls, i)
+        if buySeqCountdown.count == cd_bars - 1
+            float b8c = buySeqCountdown.bar8C
             // bar 13 candidate: only cd_term_val price qualifies; if it does, check condition 1 then remove
             if cd_term_q
                 bool add_label = false
@@ -603,15 +596,14 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                     add_label := true
                 
                 if add_label
-                    string start_time = time_to_yyyymmdd(array.get(seq_cd_buy_ts, i))
-                    // label_13_txt = "13" + "\n" + start_time
-                    label_13_txt = str.tostring(cnt + 1)
+                    string start_time = time_to_yyyymmdd(array.get(seq_cd_buy_ts, qIdx))
+                    label_13_txt = str.tostring(buySeqCountdown.count + 1)
                     buy_seq_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
                     buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = label_13_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = buy_seq_bar_13_text_format)
                     
                     if enable_seq_risk_level or enable_seq_risk_zone
-                        float peak_th = array.get(seq_cd_buy_peak_th, i)
-                        float peak_tl = array.get(seq_cd_buy_peak_tl, i)
+                        float peak_th = buySeqCountdown.peakTrueHigh
+                        float peak_tl = buySeqCountdown.peakTrueLow
                         if not na(peak_th) and not na(peak_tl)
                             float rl = peak_tl - (peak_th - peak_tl)
                             float final_seq_cd_buy_risk_level = rl * (1 - tdst_offset)
@@ -629,40 +621,34 @@ if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
                                 seq_cd_risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
                                 seq_cd_risk_buy_fill := linefill.new(seq_cd_risk_buy_ref_line, seq_cd_risk_buy_line, color=risk_buy_zone_color)
 
-                    array.remove(cd_buy_cnts,  i)
-                    array.remove(cd_buy_b8cls, i)
-                    array.remove(seq_cd_buy_b5cls, i)
-                    array.remove(seq_cd_buy_peak_th, i)
-                    array.remove(seq_cd_buy_peak_tl, i)
-                    array.remove(seq_cd_buy_inters, i)
-                    // array.remove(seq_cd_buy_ts,    i)
+                    array.remove(seqBuyCountdownQueue, qIdx)
+                    // array.remove(seq_cd_buy_ts,    qIdx)
         else
-            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(seq_cd_buy_inters, i)
+            bool inters_ok = buySeqCountdown.count > 0 or (not enable_seq_intersection) or buySeqCountdown.intersectionStatus
             // bool inters_ok = true
             if inters_ok
                 if cd_std_q
-                    int new_cnt = cnt + 1
+                    int new_cnt = buySeqCountdown.count + 1
                     if new_cnt == 5
-                        array.set(cd_buy_cnts, i, new_cnt)
-                        array.set(seq_cd_buy_b5cls, i, close)
+                        buySeqCountdown.bar5C := close
+                        buySeqCountdown.count := new_cnt
                     else if new_cnt == 8
                         bool set_buy_b8c = not enable_8_vs_5
                         if enable_8_vs_5
-                            float b5c = array.get(seq_cd_buy_b5cls, i)
+                            float b5c = buySeqCountdown.bar5C
                             set_buy_b8c := not na(b5c) and low <= b5c
                         
                         if set_buy_b8c
-                            // if use_aggressive_mode
-                            //     array.set(cd_buy_b8cls, i, low)
-                            // else
-                            array.set(cd_buy_b8cls, i, close)
-                            array.set(cd_buy_cnts, i, new_cnt)
+                            buySeqCountdown.bar8C := close
+                            buySeqCountdown.count := new_cnt
                     else
-                        array.set(cd_buy_cnts, i, new_cnt)
-        i -= 1
-    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(cd_buy_cnts) > 0
-        int    last_i    = array.size(cd_buy_cnts) - 1
-        int    last_cnt  = array.get(cd_buy_cnts, last_i)
+                        buySeqCountdown.count := new_cnt
+                    
+        qIdx -= 1
+    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(seqBuyCountdownQueue) > 0
+        int last_i = array.size(seqBuyCountdownQueue) - 1
+        CountdownState cd = array.get(seqBuyCountdownQueue, last_i)
+        int last_cnt = cd.count
         // if enable_print_log(time, 2022, 03, 16, "<=") and enable_print_log(time, 2022, 01, 24, ">=")
         buy_countdown_label_non_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
 
@@ -689,7 +675,7 @@ if not na(combo_cd_risk_sel_line)
 // Each Sell Setup 9 pushes a new entry; all run in parallel.
 // Cancelled wholesale when a Buy Setup 9 completes.
 // Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
-if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
+if enable_sequential_countdown and array.size(seqSellCountdownQueue) > 0
     bool use_aggressive_mode = cd_comp_val == PRICE_LOW_HIGH
     float sel_cur   = cd_term_val == PRICE_CLOSE ? close : cd_term_val == PRICE_OPEN_CLOSE ? math.max(open, close) : high
     if use_aggressive_mode
@@ -698,28 +684,26 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
     float std_compare_val = use_aggressive_mode ? high : close
     // bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   >= high[cd_look_back] : close   > high[cd_look_back]
     bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? std_compare_val >= high[cd_look_back] : std_compare_val > high[cd_look_back]
-    int i = array.size(cd_sel_cnts) - 1
-    while i >= 0
-        int cnt = array.get(cd_sel_cnts, i)
+    int qIdx = array.size(seqSellCountdownQueue) - 1
+    while qIdx >= 0
+        CountdownState sellSeqCountdown = array.get(seqSellCountdownQueue, qIdx)
+        if (sellSeqCountdown.count > 0) or (sellSeqCountdown.count == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
+            if na(sellSeqCountdown.peakTrueHigh) or true_high > sellSeqCountdown.peakTrueHigh
+                sellSeqCountdown.peakTrueHigh := true_high
+                sellSeqCountdown.peakTrueLow := true_low
 
-        if (cnt > 0) or (cnt == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
-            float cur_peak = array.get(seq_cd_sel_peak_th, i)
-            if na(cur_peak) or true_high > cur_peak
-                array.set(seq_cd_sel_peak_th, i, true_high)
-                array.set(seq_cd_sel_peak_tl, i, true_low)
-        
-        if enable_seq_intersection and cnt == 0 and not array.get(seq_cd_sel_inters, i)
+        if enable_seq_intersection and sellSeqCountdown.count == 0 and not sellSeqCountdown.intersectionStatus
             idx = array.indexof(seq_cd_intersection_bar_9_checked, bar_index)
             if idx < 0
                 for seq_intersection_lookback = 3 to seq_intersection_cnt
                     if low <= high[seq_intersection_lookback]
-                        array.set(seq_cd_sel_inters, i, true)
+                        sellSeqCountdown.intersectionStatus := true
                         float final_price = high[seq_intersection_lookback] * (1 + intersection_line_offset)
                         sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
                         break
 
-        if cnt == cd_bars - 1
-            float b8c = array.get(cd_sel_b8cls, i)
+        if sellSeqCountdown.count == cd_bars - 1
+            float b8c = sellSeqCountdown.bar8C
  
             if cd_term_q
                 bool add_label = false
@@ -730,13 +714,13 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                     add_label := true
                 
                 if add_label
-                    label_13_text = str.tostring(cnt + 1)
+                    label_13_text = str.tostring(sellSeqCountdown.count + 1)
                     sell_seq_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
                     sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = label_13_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = sell_seq_bar_13_text_format)
                     
                     if enable_seq_risk_level or enable_seq_risk_zone
-                        float peak_th = array.get(seq_cd_sel_peak_th, i)
-                        float peak_tl = array.get(seq_cd_sel_peak_tl, i)
+                        float peak_th = sellSeqCountdown.peakTrueHigh
+                        float peak_tl = sellSeqCountdown.peakTrueLow
                         if not na(peak_th) and not na(peak_tl)
                             float rl = peak_th + (peak_th - peak_tl)
                             float final_seq_cd_sell_risk_level = rl * (1 + tdst_offset)
@@ -754,41 +738,33 @@ if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
                                 seq_cd_risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
                                 seq_cd_risk_sel_fill := linefill.new(seq_cd_risk_sel_line, seq_cd_risk_sel_ref_line, color=color.new(seq_cd_sell_color, 90))
                             
-                    array.remove(cd_sel_cnts,  i)
-                    array.remove(cd_sel_b8cls, i)
-                    array.remove(seq_cd_sel_b5cls, i)
-                    array.remove(seq_cd_sel_peak_th, i)
-                    array.remove(seq_cd_sel_peak_tl, i)
-                    array.remove(seq_cd_sel_inters, i)
+                    array.remove(seqSellCountdownQueue, qIdx)
         else
             // bars 1-12: standard close condition
-            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(seq_cd_sel_inters, i)
+            bool inters_ok = sellSeqCountdown.count > 0 or (not enable_seq_intersection) or sellSeqCountdown.intersectionStatus
             // bool inters_ok = true
             if inters_ok
                 if cd_std_q
-                    int new_cnt = cnt + 1
-                    
+                    int new_cnt = sellSeqCountdown.count + 1
                     if new_cnt == 5
-                        array.set(seq_cd_sel_b5cls, i, close)
-                        array.set(cd_sel_cnts, i, new_cnt)
+                        sellSeqCountdown.bar5C := close
+                        sellSeqCountdown.count := new_cnt
                     else if new_cnt == 8
                         bool set_sell_b8c = not enable_8_vs_5
                         if enable_8_vs_5
-                            float b5c = array.get(seq_cd_sel_b5cls, i)
+                            float b5c = sellSeqCountdown.bar5C
                             set_sell_b8c := not na(b5c) and high >= b5c
                         
                         if set_sell_b8c
-                            // if use_aggressive_mode
-                            //     array.set(cd_sel_b8cls, i, high)
-                            // else
-                            array.set(cd_sel_b8cls, i, close)
-                            array.set(cd_sel_cnts, i, new_cnt)
+                            sellSeqCountdown.bar8C := close 
+                            sellSeqCountdown.count := new_cnt
                     else
-                        array.set(cd_sel_cnts, i, new_cnt)
-        i -= 1
-    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(cd_sel_cnts) > 0
-        int    last_i   = array.size(cd_sel_cnts) - 1
-        int    last_cnt = array.get(cd_sel_cnts, last_i)
+                        sellSeqCountdown.count := new_cnt
+        qIdx -= 1
+    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(seqSellCountdownQueue) > 0
+        int last_i = array.size(seqSellCountdownQueue) - 1
+        CountdownState cd = array.get(seqSellCountdownQueue, last_i)
+        int last_cnt = cd.count
         sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
 
 
