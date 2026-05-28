@@ -1,0 +1,994 @@
+//@version=6
+indicator("TD-Claude", overlay=true, max_labels_count=500, max_lines_count=500, max_bars_back=5000, behind_chart = false)
+
+// plotshape(high < high[1], style=shape.diamond, location=location.belowbar, color=color.black, size=size.small)
+var string ENABLE_SHOW_ALL_BAR_Y = "All"
+var string ENABLE_SHOW_ALL_BAR_N = "Active only"
+var string COMPARE_WITH_EQUAL = "With equal"
+var string COMPARE_NO_EQUAL = "Without equal"
+var string LABEL_BOLD = "Bold"
+var string LABEL_NORMAL = "Normal"
+var string PRICE_CLOSE = "Close"
+var string PRICE_LOW_HIGH = "Low High"
+var string PRICE_OPEN_CLOSE = "Open or Close"
+var string COMBO_AGGRESSIVE = "Aggressive"
+var string COMBO_STANDARD = "Standard"
+var string COMBO_CONSERVATIVE = "Conservative"
+// ── Inputs ────────────────────────────────────────────────────────────────────
+enable_setup  = input.bool(false,         "Setup", inline="setup_row", display = display.none)
+setup_buy_color     = input.color(color.rgb(199, 146, 248), "Buy", inline="setup_row", display = display.none)
+setup_sell_color    = input.color(color.rgb(25,  140, 248), "Sell", inline="setup_row", display = display.none)
+
+enable_tdst      = input.bool(false,              "TDST", inline = "tdst_row", display = display.none)
+tdst_res_color = input.color(color.rgb(4, 4, 4), "Res", inline = "tdst_row", display = display.none)
+tdst_sup_color = input.color(color.rgb(2, 2, 2), "Sup", inline = "tdst_row", display = display.none)
+
+enable_sequential_countdown  = input.bool(false,                      "Sequential Countdown",       inline = "Sequential_countdown_row", display = display.none)
+seq_cd_buy_color      = input.color(color.rgb(4, 4, 4),  "Buy",  inline = "Sequential_countdown_row", display = display.none)
+seq_cd_sell_color     = input.color(color.rgb(4, 4, 4),  "Sell", inline = "Sequential_countdown_row", display = display.none)
+
+enable_combo_countdown  = input.bool(false,                      "Combo Countdown",       inline = "Combo_countdown_row", display = display.none)
+combo_cd_buy_color      = input.color(color.rgb(4, 4, 4),  "Buy",  inline = "Combo_countdown_row", display = display.none)
+combo_cd_sell_color     = input.color(color.rgb(4, 4, 4),  "Sell", inline = "Combo_countdown_row", display = display.none)
+
+font_size = input.int(20, "Label Font Size", display = display.none)
+show_all_bars = input.string(ENABLE_SHOW_ALL_BAR_N, "Show all counts", options=[ENABLE_SHOW_ALL_BAR_N, ENABLE_SHOW_ALL_BAR_Y], display = display.none)//  setup和countdown公用这个
+
+setup_len = input.int(9, "Setup Length (min 9)", minval=9, group="Setup", display = display.none)
+setup_look_back  = input.int(4, "Lookback Bars (min 4)", minval=4, group="Setup", display = display.none)
+setup_use_equal = input.string(COMPARE_NO_EQUAL, "Setup comparison", options=[COMPARE_NO_EQUAL, COMPARE_WITH_EQUAL], group="Setup", display = display.none)
+label_bold = input.string(LABEL_BOLD, "Label Style", options=[LABEL_BOLD, LABEL_NORMAL], group="Setup", display = display.none)
+enable_perfect_setup = input.bool(false,        "Enable perfect setup", group="Setup", display = display.none)
+enable_risk_level  = input.bool(false, "Enable Risk Level", group="Setup", display = display.none)
+enable_risk_zone      = input.bool(false, "Enable Risk Level Zone",  group="Setup", display = display.none)
+enable_price_flip      = input.bool(false, "Enable Price Flip",  group="Setup", display = display.none)
+
+tdst_line_weight = input.int(3, "TDST line weight", group="TDST", display = display.none)
+risk_level_line_weight = input.int(2, "Risk level line weight", group="TDST", display = display.none)
+risk_buy_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Buy Zone Color",  group="Risk Level", display = display.none)
+risk_sel_zone_color = input.color(color.new(color.rgb(2,  2, 2), 95), "Sell Zone Color", group="Risk Level", display = display.none)
+
+cd_bars           = input.int(13,        "Bars to Countdown",             minval=1, group="Countdown (shared)", display = display.none)
+cd_look_back      = input.int(2,         "Bars to Look Back",             minval=1, group="Countdown (shared)", display = display.none)
+cd_comp_val       = input.string(PRICE_CLOSE,       "Countdown Comparison Value",    options=[PRICE_CLOSE, PRICE_LOW_HIGH],                          group="Countdown (shared)", display = display.none)
+cd_term_val       = input.string(PRICE_OPEN_CLOSE,    "Termination Count Price Value", options=[PRICE_OPEN_CLOSE, PRICE_CLOSE, PRICE_LOW_HIGH],          group="Countdown (shared)", display = display.none)
+cd_compare        = input.string(COMPARE_WITH_EQUAL, "Countdown Compare",            options=[COMPARE_WITH_EQUAL, COMPARE_NO_EQUAL],               group="Countdown (shared)", display = display.none)
+cd_label_bold = input.string(LABEL_BOLD, "Label Style", options=[LABEL_BOLD, LABEL_NORMAL], group="Countdown (shared)", display = display.none)
+
+enable_seq_intersection = input.bool(false,                      "Enable Intersection",       group="Sequential Countdown", display = display.none)
+seq_intersection_cnt = input.int(13,                      "Intersection Lookback Bars",       group="Sequential Countdown", display = display.none)
+enable_8_vs_5 = input.bool(false,                      "8 vs 5 qualifier",       group="Sequential Countdown", display = display.none)
+enable_13_vs_8 = input.bool(false,                      "Last vs 8 qualifier",       group="Sequential Countdown", display = display.none)
+enable_seq_risk_level = input.bool(false,                      "Enable Risk Level",       group="Sequential Countdown", display = display.none)
+enable_seq_risk_zone = input.bool(false,                      "Enable Risk Level Zone",       group="Sequential Countdown", display = display.none)
+
+combo_version = input.string(COMBO_STANDARD, "Combo version", options=[COMBO_STANDARD, COMBO_AGGRESSIVE, COMBO_CONSERVATIVE], group="Combo Countdown",display = display.none)
+enable_combo_risk_level = input.bool(false,                      "Enable Risk Level",       group="Combo Countdown", display = display.none)
+enable_combo_risk_zone = input.bool(false,                      "Enable Risk Level Zone",       group="Combo Countdown", display = display.none)
+
+enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Breakout qualifiers", display = display.none)
+
+// ── State ─────────────────────────────────────────────────────────────────────
+cd_font_size = 20
+
+var int            buy_cnt  = 0
+var int            sel_cnt  = 0
+var bool           buy_done = false
+var bool           sel_done = false
+var array<int>     buy_bi  = array.new<int>(setup_len, 0)
+var array<float>   buy_lo  = array.new<float>(setup_len, 0.0)
+var array<float>   buy_hi  = array.new<float>(setup_len, 0.0) // Added for TDST
+var array<float>   buy_tl  = array.new<float>(setup_len, 0.0) // true_low for risk level
+
+var bool         buy_perf_wait = false   // waiting for deferred buy perfection
+var float        buy_perf_ref  = na      // min(lo6, lo7) reference
+var array<int>     sel_bi  = array.new<int>(setup_len, 0)
+var array<float>   sel_hi  = array.new<float>(setup_len, 0.0)
+var array<float>   sel_lo  = array.new<float>(setup_len, 0.0) // Added for TDST
+var array<float>   sel_th  = array.new<float>(setup_len, 0.0) // true_high for risk level
+
+var bool         sel_perf_wait = false   // waiting for deferred sell perfection
+var float        sel_perf_ref  = na      // max(hi6, hi7) reference
+var line         tdst_buy_line = na      // TDST resistance line (from buy setup)
+var line         tdst_sel_line = na      // TDST support line (from sell setup)
+var float        tdst_buy_price = na      // original price of active buy TDST (before offset)
+var float        tdst_sel_price = na      // original price of active sell TDST (before offset)
+var line         risk_buy_line  = na
+var line         risk_sel_line  = na
+var float        risk_buy_price = na
+var float        risk_sel_price = na
+var line         risk_buy_ref_line = na
+var line         risk_sel_ref_line = na
+var linefill     risk_buy_fill     = na
+var linefill     risk_sel_fill     = na
+
+var float        seq_cd_risk_buy_price = na
+var float        seq_cd_risk_sel_price = na
+var line         seq_cd_risk_buy_line  = na
+var line         seq_cd_risk_sel_line  = na
+var line         seq_cd_risk_buy_ref_line = na
+var line         seq_cd_risk_sel_ref_line = na
+var linefill     seq_cd_risk_buy_fill     = na
+var linefill     seq_cd_risk_sel_fill     = na
+
+var float        combo_cd_risk_buy_price = na
+var float        combo_cd_risk_sel_price = na
+var line         combo_cd_risk_buy_line  = na
+var line         combo_cd_risk_sel_line  = na
+var line         combo_cd_risk_buy_ref_line = na
+var line         combo_cd_risk_sel_ref_line = na
+var linefill     combo_cd_risk_buy_fill     = na
+var linefill     combo_cd_risk_sel_fill     = na
+
+// ── Countdown State (parallel arrays; one entry per active countdown) ─────────
+// Each Setup 9 pushes a new entry; countdowns run independently in parallel.
+var array<int>   cd_buy_cnts  = array.new<int>()    // current count per active buy countdown
+var array<int>   cd_sel_cnts  = array.new<int>()    // current count per active sell countdown
+var array<float> cd_buy_b8cls = array.new<float>()  // bar-8 close per active buy countdown
+var array<float> cd_sel_b8cls = array.new<float>()  // bar-8 close per active sell countdown
+var array<int>   seq_cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
+var array<int>   cd_sel_ts    = array.new<int>()     // bar-9 start timestamp per active sell countdown
+var array<float> seq_cd_buy_b5cls = array.new<float>()  // bar-5 close per active buy countdown (8vs5 qualifier)
+var array<float> seq_cd_sel_b5cls = array.new<float>()  // bar-5 close per active sell countdown (8vs5 qualifier)
+
+var array<float> seq_cd_sel_peak_th = array.new<float>()  // running-max true high per active sell countdown
+var array<float> seq_cd_sel_peak_tl = array.new<float>()  // true low of the bar that set the running-max true high
+
+var array<float> seq_cd_buy_peak_th = array.new<float>()  // true high of the bar that set the running-min true low
+var array<float> seq_cd_buy_peak_tl = array.new<float>()  // running-min true low per active buy countdown
+var array<bool>  seq_cd_buy_inters      = array.new<bool>()   // intersection satisfied per active buy countdown
+var array<bool>  seq_cd_sel_inters      = array.new<bool>()   // intersection satisfied per active sell countdown
+var array<int> seq_cd_intersection_bar_9_checked = array.new<int>()
+
+var array<int>   combo_cd_buy_cnts     = array.new<int>()
+var array<float> combo_cd_buy_prev_cls = array.new<float>()
+var array<int>   combo_cd_buy_start_bi = array.new<int>()
+var array<int>   combo_cd_buy_b1_bi    = array.new<int>()
+var array<int>   combo_cd_sel_cnts     = array.new<int>()
+var array<float> combo_cd_sel_prev_cls = array.new<float>()
+var array<int>   combo_cd_sel_start_bi = array.new<int>()
+var array<int>   combo_cd_sel_b1_bi    = array.new<int>()
+
+var array<float> combo_cd_buy_peak_th = array.new<float>()
+var array<float> combo_cd_buy_peak_tl = array.new<float>()
+var array<float> combo_cd_sel_peak_th = array.new<float>()
+var array<float> combo_cd_sel_peak_tl = array.new<float>()
+
+// var float offset = 0.01
+var float offset = 0
+var float cd_offset = 0.005
+// var float cd_offset = 0
+// var float tdst_offset = 0.002
+var float tdst_offset = 0
+var float intersection_line_offset = 0
+var tdst_line_style = line.style_dashed
+var tdst_line_break_style = line.style_solid
+// 完美化信号触发变量
+bool isBuyPerfected = false
+bool isSellPerfected = false
+// 用打日志的方式把数据都打出来，做单元测试
+// Returns true only on the bar whose time matches the stored timestamp.
+enable_print_log(int cur_bar_time, int target_year, int target_month, int target_day, string op) =>
+    int cur_ymd    = year(cur_bar_time) * 10000 + month(cur_bar_time) * 100 + dayofmonth(cur_bar_time)
+    int target_ymd = target_year * 10000 + target_month * 100 + target_day
+    switch op
+        "<"  => cur_ymd <  target_ymd
+        "<=" => cur_ymd <= target_ymd
+        ">"  => cur_ymd >  target_ymd
+        ">=" => cur_ymd >= target_ymd
+        =>     cur_ymd == target_ymd
+
+time_to_yyyymmdd(int cur_bar_time) =>
+    str.tostring(year(cur_bar_time) % 100, "00") + str.tostring(month(cur_bar_time), "00") + str.tostring(dayofmonth(cur_bar_time), "00")
+
+// ── True High / True Low ─────────────────────────────────────────────────────
+true_high = math.max(high, nz(close[1], high))
+true_low  = math.min(low,  nz(close[1], low))
+
+// 
+// if enable_print_log(time, 2025, 04, 21, ">=") and enable_print_log(time, 2025, 05, 15, "<=")
+//     log.info("["+str.tostring(open) + ", " + str.tostring(high) + ", " + str.tostring(low) + ", " + str.tostring(close)+",  ]")
+
+// ── Buy Setup ────────────────────────────────────────────────────────────────
+//2001年3-20， 202-04-16，2022-08-05，2025-07-07，2025-12-04， SPX intersection
+buy_cond = setup_use_equal == COMPARE_WITH_EQUAL ? close <= close[setup_look_back] : close < close[setup_look_back]
+if buy_cond
+    if not buy_done
+        buy_cnt += 1
+        array.set(buy_bi, buy_cnt - 1, bar_index)
+        array.set(buy_lo, buy_cnt - 1, low)
+        array.set(buy_hi, buy_cnt - 1, true_high)
+        array.set(buy_tl, buy_cnt - 1, true_low)
+
+        if buy_cnt == setup_len
+            buy_done := true
+            array.push(cd_buy_cnts,  0)
+            array.push(cd_buy_b8cls, na)
+            array.push(seq_cd_buy_b5cls, na)
+            array.push(seq_cd_buy_peak_th, na)
+            array.push(seq_cd_buy_peak_tl, na)
+
+            bool buy_inters_done = false
+            if enable_sequential_countdown and enable_seq_intersection
+                for i = 4 to setup_len 
+                    if high[1] >=  low[i]
+                        buy_inters_done := true
+                        float final_price = low[i] * (1 - intersection_line_offset)
+                        buy_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                        break
+                if not buy_inters_done
+                    array.push(seq_cd_intersection_bar_9_checked, bar_index)
+                    for i = 3 to setup_len
+                        if high >= low[i]
+                            buy_inters_done := true
+                            float final_price = low[i] * (1 - intersection_line_offset)
+                            buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                            break
+                
+            array.push(seq_cd_buy_inters, buy_inters_done)
+            
+            if enable_combo_countdown
+                array.push(combo_cd_buy_cnts,     0)
+                array.push(combo_cd_buy_prev_cls, na)
+                array.push(combo_cd_buy_start_bi, bar_index)
+                array.push(combo_cd_buy_b1_bi,    array.get(buy_bi, 0))
+                array.push(combo_cd_buy_peak_th,  na)
+                array.push(combo_cd_buy_peak_tl,  na)
+
+            // array.push(seq_cd_buy_ts, time)
+            // Sell countdown risk level terminates at Buy Setup 9
+            if not na(seq_cd_risk_sel_line)
+                line.set_x2(seq_cd_risk_sel_line, bar_index)
+                seq_cd_risk_sel_line  := na
+                seq_cd_risk_sel_price := na
+            if not na(seq_cd_risk_sel_ref_line)
+                line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
+                seq_cd_risk_sel_ref_line := na
+            if not na(combo_cd_risk_sel_line)
+                line.set_x2(combo_cd_risk_sel_line, bar_index)
+                combo_cd_risk_sel_line  := na
+                combo_cd_risk_sel_price := na
+            if not na(combo_cd_risk_sel_ref_line)
+                line.set_x2(combo_cd_risk_sel_ref_line, bar_index)
+                combo_cd_risk_sel_ref_line := na
+
+            // 判定 Perfected Buy: 8或9的Low < 6和7的Low
+            lo6   = array.get(buy_lo, setup_len - 4)
+            lo7   = array.get(buy_lo, setup_len - 3)
+            lo8   = array.get(buy_lo, setup_len - 2)
+            lo9   = array.get(buy_lo, setup_len - 1)
+            min67 = math.min(lo6, lo7)
+            if lo8 <= min67 or lo9 <= min67
+                isBuyPerfected := true
+
+            
+            for i = (show_all_bars == ENABLE_SHOW_ALL_BAR_N ? setup_len - 1 : 0) to setup_len - 1
+                if i == setup_len - 1
+                    string label_txt = na
+                    if enable_setup and enable_perfect_setup
+                        if isBuyPerfected
+                            label_txt := str.tostring(i + 1) + '\n▲'
+                            label_txt
+                        else
+                            label_txt := str.tostring(i + 1)
+                            label_txt
+                    else if enable_setup and (not enable_perfect_setup)
+                        label_txt := str.tostring(i + 1)
+                        label_txt
+                    else if (not enable_setup) and enable_perfect_setup
+                        if isBuyPerfected
+                            label_txt := '▲'
+                            label_txt
+                    if not na(label_txt)
+                        if label_bold == LABEL_BOLD
+                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_bold)
+                             
+                        else
+                            buy_label_bar_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                             
+                else 
+                    if enable_setup
+                        string label_txt = str.tostring(i + 1)
+                        buy_label_bar_non_9 = label.new(x = array.get(buy_bi, i), y = array.get(buy_lo, i) * (1 - offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size, text_formatting=text.format_none)
+                         
+                        
+            // if not immediately perfect, arm deferred watch
+            if enable_perfect_setup and not isBuyPerfected
+                buy_perf_wait := true
+                buy_perf_ref  := min67
+            // TDST resistance: highest high of this buy setup
+            if enable_tdst
+                float setup_max_hi = array.max(buy_hi)
+                tdst_buy_price := setup_max_hi
+                float final_high = setup_max_hi * (1 + tdst_offset)
+                int res_bar_index = array.get(buy_bi, array.indexof(buy_hi, setup_max_hi))
+                if not na(tdst_buy_line)
+                    line.set_x2(tdst_buy_line, res_bar_index)
+                    line.set_extend(tdst_buy_line, extend.none)
+                tdst_buy_line := line.new(res_bar_index, final_high, bar_index, final_high, extend=extend.none, color=tdst_res_color, style=tdst_line_style, width=tdst_line_weight)
+            
+            if enable_risk_level
+                float min_tl  = array.min(buy_tl)
+                int   ext_idx = array.indexof(buy_tl, min_tl)
+                float ext_th  = array.get(buy_hi, ext_idx)
+                float rl      = min_tl - (ext_th - min_tl)
+                float final_sell_risk_level = rl * (1 - tdst_offset)
+                risk_buy_price := rl
+                if not na(risk_buy_line)
+                    line.set_x2(risk_buy_line, bar_index)
+                    line.set_extend(risk_buy_line, extend.none)
+                if not na(risk_buy_ref_line)
+                    line.set_x2(risk_buy_ref_line, bar_index)
+                    line.set_extend(risk_buy_ref_line, extend.none)
+                if not na(risk_sel_line)
+                    line.set_x2(risk_sel_line, bar_index)
+                    line.set_extend(risk_sel_line, extend.none)
+                    risk_sel_line := na
+                if not na(risk_sel_ref_line)
+                    line.set_x2(risk_sel_ref_line, bar_index)
+                    line.set_extend(risk_sel_ref_line, extend.none)
+                    risk_sel_ref_line := na
+                risk_buy_line := line.new(bar_index, final_sell_risk_level, bar_index, final_sell_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
+                if enable_risk_zone
+                    risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                    risk_buy_fill := linefill.new(risk_buy_ref_line, risk_buy_line, color=risk_buy_zone_color)
+            
+            // // SETUP 看看怎么加入允许没有价格翻转的控制箱，芯片上个月连续两个sell 9，且没有价格翻转, 但是perfect（尤其是delay的perfect）是否也要同时停掉，这个得要找点资料研究下
+            // if not enable_price_flip
+            //     buy_cnt       := 0
+            //     buy_done      := false
+            //     buy_perf_wait := false
+            
+else
+    buy_cnt  := 0
+    buy_done := false
+
+
+// deferred buy perfection: runs every bar while armed
+if buy_perf_wait and low <= buy_perf_ref
+    if enable_perfect_setup
+        buy_label_perfect = label.new(x = bar_index, y = low * (1 - offset), text = "▲", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_buy_color, style = label.style_label_up, size = font_size)
+    buy_perf_wait := false
+
+// ── Sell Setup ───────────────────────────────────────────────────────────────
+sel_cond = setup_use_equal == COMPARE_WITH_EQUAL ? close >= close[setup_look_back] : close > close[setup_look_back]
+if sel_cond
+    if not sel_done
+        sel_cnt += 1
+        array.set(sel_bi, sel_cnt - 1, bar_index)
+        array.set(sel_hi, sel_cnt - 1, high)
+        array.set(sel_lo, sel_cnt - 1, true_low)
+        array.set(sel_th, sel_cnt - 1, true_high)
+
+        if sel_cnt == setup_len
+            sel_done := true
+            array.push(cd_sel_cnts,  0)
+            array.push(cd_sel_b8cls, na)
+            array.push(seq_cd_sel_b5cls, na)
+            array.push(seq_cd_sel_peak_th, na)
+            array.push(seq_cd_sel_peak_tl, na)
+
+            bool sel_inters_done = false
+            if enable_sequential_countdown and enable_seq_intersection
+                for i = 4 to setup_len
+                    if low[1] <= high[i]
+                        sel_inters_done := true
+                        float final_price = high[i] * (1 + intersection_line_offset)
+                        sell_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                        break
+                
+                if not sel_inters_done
+                    array.push(seq_cd_intersection_bar_9_checked, bar_index)
+                    for i = 3 to setup_len
+                        if low <= high[i]
+                            sel_inters_done := true
+                            float final_price = high[i] * (1 + intersection_line_offset)
+                            sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                            break
+            array.push(seq_cd_sel_inters, sel_inters_done)
+            
+            if enable_combo_countdown
+                array.push(combo_cd_sel_cnts,     0)
+                array.push(combo_cd_sel_prev_cls, na)
+                array.push(combo_cd_sel_start_bi, bar_index)
+                array.push(combo_cd_sel_b1_bi,    array.get(sel_bi, 0))
+                array.push(combo_cd_sel_peak_th,  na)
+                array.push(combo_cd_sel_peak_tl,  na)
+            // array.push(cd_sel_ts,    time)
+
+            // Buy countdown risk level terminates at Sell Setup 9
+            if not na(seq_cd_risk_buy_line)
+                line.set_x2(seq_cd_risk_buy_line, bar_index)
+                seq_cd_risk_buy_line  := na
+                seq_cd_risk_buy_price := na
+            if not na(seq_cd_risk_buy_ref_line)
+                line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
+                seq_cd_risk_buy_ref_line := na
+            if not na(combo_cd_risk_buy_line)
+                line.set_x2(combo_cd_risk_buy_line, bar_index)
+                combo_cd_risk_buy_line  := na
+                combo_cd_risk_buy_price := na
+            if not na(combo_cd_risk_buy_ref_line)
+                line.set_x2(combo_cd_risk_buy_ref_line, bar_index)
+                combo_cd_risk_buy_ref_line := na
+
+            // 判定 Perfected Sell: 8或9的High > 6和7的High
+            hi6   = array.get(sel_hi, setup_len - 4)
+            hi7   = array.get(sel_hi, setup_len - 3)
+            hi8   = array.get(sel_hi, setup_len - 2)
+            hi9   = array.get(sel_hi, setup_len - 1)
+            max67 = math.max(hi6, hi7)
+            if hi8 >= max67 or hi9 >= max67
+                isSellPerfected := true
+            
+            for i = (show_all_bars == ENABLE_SHOW_ALL_BAR_N ? setup_len - 1 : 0) to setup_len - 1 
+                if i == setup_len - 1
+                    string label_txt = na
+                    if enable_setup and enable_perfect_setup
+                        if isSellPerfected
+                            label_txt := '▼\n'+str.tostring(i + 1)
+                            label_txt
+                        else
+                            label_txt := str.tostring(i + 1)
+                            label_txt
+                    else if enable_setup and (not enable_perfect_setup)
+                        label_txt := str.tostring(i + 1)
+                        label_txt
+                    else if (not enable_setup) and enable_perfect_setup
+                        if isSellPerfected
+                            label_txt := '▼'
+                            label_txt
+                    if not na(label_txt)
+                        if label_bold == LABEL_BOLD
+                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_bold)
+                        else
+                            sell_label_bar_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                             
+                else 
+                    if enable_setup
+                        string label_txt = str.tostring(i + 1)
+                        sell_label_bar_non_9 = label.new(x = array.get(sel_bi, i), y = array.get(sel_hi, i)  * (1 + offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size, text_formatting=text.format_none)
+                         
+            // if not immediately perfect, arm deferred watch
+            if enable_perfect_setup and not isSellPerfected
+                sel_perf_wait := true
+                sel_perf_ref  := max67
+
+            if enable_tdst
+                float setup_min_lo = array.min(sel_lo)
+                tdst_sel_price := setup_min_lo
+                float final_low = setup_min_lo * (1 - tdst_offset)
+                int support_bar_index = array.get(sel_bi, array.indexof(sel_lo, setup_min_lo))
+                if not na(tdst_sel_line)
+                    line.set_x2(tdst_sel_line, support_bar_index)
+                    line.set_extend(tdst_sel_line, extend.none)
+                tdst_sel_line := line.new(support_bar_index, final_low, bar_index, final_low, extend=extend.none, color=tdst_sup_color, style=tdst_line_style, width=tdst_line_weight)
+            
+            if enable_risk_level
+                float max_th  = array.max(sel_th)
+                int   ext_idx = array.indexof(sel_th, max_th)
+                float ext_tl  = array.get(sel_lo, ext_idx)
+                float rl      = max_th + (max_th - ext_tl)
+                float final_buy_risk_level = rl * (1 + tdst_offset)
+                risk_sel_price := rl
+                if not na(risk_sel_line)
+                    line.set_x2(risk_sel_line, bar_index)
+                    line.set_extend(risk_sel_line, extend.none)
+                if not na(risk_sel_ref_line)
+                    line.set_x2(risk_sel_ref_line, bar_index)
+                    line.set_extend(risk_sel_ref_line, extend.none)
+                if not na(risk_buy_line)
+                    line.set_x2(risk_buy_line, bar_index)
+                    line.set_extend(risk_buy_line, extend.none)
+                    risk_buy_line := na
+                if not na(risk_buy_ref_line)
+                    line.set_x2(risk_buy_ref_line, bar_index)
+                    line.set_extend(risk_buy_ref_line, extend.none)
+                    risk_buy_ref_line := na
+                risk_sel_line := line.new(bar_index, final_buy_risk_level, bar_index, final_buy_risk_level, extend=extend.none, color=tdst_res_color, style=line.style_dashed, width=risk_level_line_weight)
+                if enable_risk_zone
+                    risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                    risk_sel_fill := linefill.new(risk_sel_line, risk_sel_ref_line, color=risk_sel_zone_color)
+            // if not enable_price_flip
+            //     sel_cnt       := 0
+            //     sel_done      := false
+            //     sel_perf_wait := false
+                
+else
+    sel_cnt  := 0
+    sel_done := false
+
+// deferred sell perfection: runs every bar while armed
+if sel_perf_wait and high >= sel_perf_ref
+    if enable_perfect_setup
+        sell_label_perfect = label.new(x = bar_index, y = high* (1 + offset), text = "▼", xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = setup_sell_color, style = label.style_label_down, size = font_size)
+
+    sel_perf_wait := false
+
+// ── Extend active TDST lines to current bar, terminate if close crosses ──────
+if not na(tdst_buy_line)
+    line.set_x2(tdst_buy_line, bar_index)
+    if close > tdst_buy_price
+        line.set_style(tdst_buy_line, tdst_line_break_style)
+        tdst_buy_line := na
+        
+        
+if not na(tdst_sel_line)
+    line.set_x2(tdst_sel_line, bar_index)
+    if close < tdst_sel_price
+        line.set_style(tdst_sel_line, tdst_line_break_style)
+        tdst_sel_line := na
+        
+
+if not na(risk_buy_line)
+    line.set_x2(risk_buy_line, bar_index)
+    if not na(risk_buy_ref_line)
+        line.set_x2(risk_buy_ref_line, bar_index)
+    if close < risk_buy_price
+        line.set_style(risk_buy_line, tdst_line_break_style)
+        risk_buy_line := na
+        risk_buy_ref_line := na
+
+if not na(risk_sel_line)
+    line.set_x2(risk_sel_line, bar_index)
+    if not na(risk_sel_ref_line)
+        line.set_x2(risk_sel_ref_line, bar_index)
+    if close > risk_sel_price
+        line.set_style(risk_sel_line, tdst_line_break_style)
+        risk_sel_line := na
+        risk_sel_ref_line := na
+
+
+if not na(seq_cd_risk_buy_line)
+    line.set_x2(seq_cd_risk_buy_line, bar_index)
+    if not na(seq_cd_risk_buy_ref_line)
+        line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
+    if close < seq_cd_risk_buy_price
+        line.set_style(seq_cd_risk_buy_line, tdst_line_break_style)
+        seq_cd_risk_buy_line     := na
+        seq_cd_risk_buy_ref_line := na
+
+if not na(combo_cd_risk_buy_line)
+    line.set_x2(combo_cd_risk_buy_line, bar_index)
+    if not na(combo_cd_risk_buy_ref_line)
+        line.set_x2(combo_cd_risk_buy_ref_line, bar_index)
+    if close < combo_cd_risk_buy_price
+        line.set_style(combo_cd_risk_buy_line, tdst_line_break_style)
+        combo_cd_risk_buy_line     := na
+        combo_cd_risk_buy_ref_line := na
+
+
+// ── Buy Countdown ─────────────────────────────────────────────────────────────
+// Each Buy Setup 9 pushes a new entry; all run in parallel.
+// Cancelled wholesale when a Sell Setup 9 completes.
+// Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
+if enable_sequential_countdown and array.size(cd_buy_cnts) > 0
+    bool use_aggressive_mode = cd_comp_val == PRICE_LOW_HIGH
+    float buy_cur   = cd_term_val == PRICE_CLOSE ? close : cd_term_val == PRICE_OPEN_CLOSE ? math.min(open, close) : low
+    if use_aggressive_mode
+        buy_cur := low
+    bool  cd_term_q = cd_compare == COMPARE_WITH_EQUAL ? buy_cur <= low[cd_look_back] : buy_cur < low[cd_look_back]
+    float std_compare_val = use_aggressive_mode ? low : close
+    // bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   <= low[cd_look_back] : close   < low[cd_look_back]
+    bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? std_compare_val   <= low[cd_look_back] : std_compare_val   < low[cd_look_back]
+    int i = array.size(cd_buy_cnts) - 1
+    while i >= 0
+        int cnt = array.get(cd_buy_cnts, i)
+        if (cnt > 0) or (cnt == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
+            float cur_peak = array.get(seq_cd_buy_peak_tl, i)
+            if na(cur_peak) or true_low < cur_peak
+                array.set(seq_cd_buy_peak_tl, i, true_low)
+                array.set(seq_cd_buy_peak_th, i, true_high)
+        
+        if enable_seq_intersection and cnt == 0 and not array.get(seq_cd_buy_inters, i)
+            idx = array.indexof(seq_cd_intersection_bar_9_checked, bar_index)
+            if idx < 0
+                for seq_intersection_lookback = 3 to seq_intersection_cnt
+                    if high >= low[seq_intersection_lookback]
+                        array.set(seq_cd_buy_inters, i, true)
+                        float final_price = low[seq_intersection_lookback] * (1 - intersection_line_offset)
+                        buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                        break
+
+        if cnt == cd_bars - 1
+            float b8c = array.get(cd_buy_b8cls, i)
+            // bar 13 candidate: only cd_term_val price qualifies; if it does, check condition 1 then remove
+            if cd_term_q
+                bool add_label = false
+
+                if enable_13_vs_8
+                    if not na(b8c) and low <= b8c
+                        add_label := true
+                else
+                    add_label := true
+                
+                if add_label
+                    string start_time = time_to_yyyymmdd(array.get(seq_cd_buy_ts, i))
+                    // label_13_txt = "13" + "\n" + start_time
+                    label_13_txt = str.tostring(cnt + 1)
+                    buy_seq_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
+                    buy_countdown_label_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = label_13_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = buy_seq_bar_13_text_format)
+                    
+                    if enable_seq_risk_level or enable_seq_risk_zone
+                        float peak_th = array.get(seq_cd_buy_peak_th, i)
+                        float peak_tl = array.get(seq_cd_buy_peak_tl, i)
+                        if not na(peak_th) and not na(peak_tl)
+                            float rl = peak_tl - (peak_th - peak_tl)
+                            float final_seq_cd_buy_risk_level = rl * (1 - tdst_offset)
+                            seq_cd_risk_buy_price := rl
+                            if not na(seq_cd_risk_buy_line)
+                                line.set_x2(seq_cd_risk_buy_line, bar_index)
+                                line.set_extend(seq_cd_risk_buy_line, extend.none)
+                            color seq_buy_rl_color = enable_seq_risk_level ? seq_cd_buy_color : color.new(color.white, 100)
+
+                            seq_cd_risk_buy_line := line.new(bar_index, final_seq_cd_buy_risk_level, bar_index, final_seq_cd_buy_risk_level, extend=extend.none, color=seq_buy_rl_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_seq_risk_zone
+                                if not na(seq_cd_risk_buy_ref_line)
+                                    line.set_x2(seq_cd_risk_buy_ref_line, bar_index)
+                                    line.set_extend(seq_cd_risk_buy_ref_line, extend.none)
+                                seq_cd_risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                seq_cd_risk_buy_fill := linefill.new(seq_cd_risk_buy_ref_line, seq_cd_risk_buy_line, color=risk_buy_zone_color)
+
+                    array.remove(cd_buy_cnts,  i)
+                    array.remove(cd_buy_b8cls, i)
+                    array.remove(seq_cd_buy_b5cls, i)
+                    array.remove(seq_cd_buy_peak_th, i)
+                    array.remove(seq_cd_buy_peak_tl, i)
+                    array.remove(seq_cd_buy_inters, i)
+                    // array.remove(seq_cd_buy_ts,    i)
+        else
+            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(seq_cd_buy_inters, i)
+            // bool inters_ok = true
+            if inters_ok
+                if cd_std_q
+                    int new_cnt = cnt + 1
+                    if new_cnt == 5
+                        array.set(cd_buy_cnts, i, new_cnt)
+                        array.set(seq_cd_buy_b5cls, i, close)
+                    else if new_cnt == 8
+                        bool set_buy_b8c = not enable_8_vs_5
+                        if enable_8_vs_5
+                            float b5c = array.get(seq_cd_buy_b5cls, i)
+                            set_buy_b8c := not na(b5c) and low <= b5c
+                        
+                        if set_buy_b8c
+                            // if use_aggressive_mode
+                            //     array.set(cd_buy_b8cls, i, low)
+                            // else
+                            array.set(cd_buy_b8cls, i, close)
+                            array.set(cd_buy_cnts, i, new_cnt)
+                    else
+                        array.set(cd_buy_cnts, i, new_cnt)
+        i -= 1
+    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(cd_buy_cnts) > 0
+        int    last_i    = array.size(cd_buy_cnts) - 1
+        int    last_cnt  = array.get(cd_buy_cnts, last_i)
+        // if enable_print_log(time, 2022, 03, 16, "<=") and enable_print_log(time, 2022, 01, 24, ">=")
+        buy_countdown_label_non_13 = label.new(x = bar_index, y = low * (1 - cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = text.format_none)
+
+
+if not na(seq_cd_risk_sel_line)
+    line.set_x2(seq_cd_risk_sel_line, bar_index)
+    if not na(seq_cd_risk_sel_ref_line)
+        line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
+    if close > seq_cd_risk_sel_price
+        line.set_style(seq_cd_risk_sel_line, tdst_line_break_style)
+        seq_cd_risk_sel_line     := na
+        seq_cd_risk_sel_ref_line := na
+
+if not na(combo_cd_risk_sel_line)
+    line.set_x2(combo_cd_risk_sel_line, bar_index)
+    if not na(combo_cd_risk_sel_ref_line)
+        line.set_x2(combo_cd_risk_sel_ref_line, bar_index)
+    if close > combo_cd_risk_sel_price
+        line.set_style(combo_cd_risk_sel_line, tdst_line_break_style)
+        combo_cd_risk_sel_line     := na
+        combo_cd_risk_sel_ref_line := na
+        
+// ── Sell Countdown ────────────────────────────────────────────────────────────
+// Each Sell Setup 9 pushes a new entry; all run in parallel.
+// Cancelled wholesale when a Buy Setup 9 completes.
+// Bar 13 completion uses cd_term_val price; bars 1-12 always use close.
+if enable_sequential_countdown and array.size(cd_sel_cnts) > 0
+    bool use_aggressive_mode = cd_comp_val == PRICE_LOW_HIGH
+    float sel_cur   = cd_term_val == PRICE_CLOSE ? close : cd_term_val == PRICE_OPEN_CLOSE ? math.max(open, close) : high
+    if use_aggressive_mode
+        sel_cur := high
+    bool  cd_term_q = cd_compare == COMPARE_WITH_EQUAL ? sel_cur >= high[cd_look_back] : sel_cur > high[cd_look_back]
+    float std_compare_val = use_aggressive_mode ? high : close
+    // bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   >= high[cd_look_back] : close   > high[cd_look_back]
+    bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? std_compare_val >= high[cd_look_back] : std_compare_val > high[cd_look_back]
+    int i = array.size(cd_sel_cnts) - 1
+    while i >= 0
+        int cnt = array.get(cd_sel_cnts, i)
+
+        if (cnt > 0) or (cnt == 0 and cd_std_q)  // 要么cnt>0表示bar1已经有了，要么 cnt=0，且当前bar可能构成bar1，那么这两种情况就计算和保留true high和true low
+            float cur_peak = array.get(seq_cd_sel_peak_th, i)
+            if na(cur_peak) or true_high > cur_peak
+                array.set(seq_cd_sel_peak_th, i, true_high)
+                array.set(seq_cd_sel_peak_tl, i, true_low)
+        
+        if enable_seq_intersection and cnt == 0 and not array.get(seq_cd_sel_inters, i)
+            idx = array.indexof(seq_cd_intersection_bar_9_checked, bar_index)
+            if idx < 0
+                for seq_intersection_lookback = 3 to seq_intersection_cnt
+                    if low <= high[seq_intersection_lookback]
+                        array.set(seq_cd_sel_inters, i, true)
+                        float final_price = high[seq_intersection_lookback] * (1 + intersection_line_offset)
+                        sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                        break
+
+        if cnt == cd_bars - 1
+            float b8c = array.get(cd_sel_b8cls, i)
+ 
+            if cd_term_q
+                bool add_label = false
+                if enable_13_vs_8
+                    if not na(b8c) and high >= b8c
+                        add_label := true
+                else
+                    add_label := true
+                
+                if add_label
+                    label_13_text = str.tostring(cnt + 1)
+                    sell_seq_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
+                    sell_countdown_label_13 = label.new(x = bar_index, y = high * (1 + cd_offset*2), text = label_13_text, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = sell_seq_bar_13_text_format)
+                    
+                    if enable_seq_risk_level or enable_seq_risk_zone
+                        float peak_th = array.get(seq_cd_sel_peak_th, i)
+                        float peak_tl = array.get(seq_cd_sel_peak_tl, i)
+                        if not na(peak_th) and not na(peak_tl)
+                            float rl = peak_th + (peak_th - peak_tl)
+                            float final_seq_cd_sell_risk_level = rl * (1 + tdst_offset)
+                            seq_cd_risk_sel_price := rl
+                            if not na(seq_cd_risk_sel_line)
+                                line.set_x2(seq_cd_risk_sel_line, bar_index)
+                                line.set_extend(seq_cd_risk_sel_line, extend.none)
+                            
+                            color seq_sell_rl_color = enable_seq_risk_level ? seq_cd_sell_color : color.new(color.white, 100)
+                            seq_cd_risk_sel_line := line.new(bar_index, final_seq_cd_sell_risk_level, bar_index, final_seq_cd_sell_risk_level, extend=extend.none, color=seq_sell_rl_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_seq_risk_zone
+                                if not na(seq_cd_risk_sel_ref_line)
+                                    line.set_x2(seq_cd_risk_sel_ref_line, bar_index)
+                                    line.set_extend(seq_cd_risk_sel_ref_line, extend.none)
+                                seq_cd_risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                seq_cd_risk_sel_fill := linefill.new(seq_cd_risk_sel_line, seq_cd_risk_sel_ref_line, color=color.new(seq_cd_sell_color, 90))
+                            
+                    array.remove(cd_sel_cnts,  i)
+                    array.remove(cd_sel_b8cls, i)
+                    array.remove(seq_cd_sel_b5cls, i)
+                    array.remove(seq_cd_sel_peak_th, i)
+                    array.remove(seq_cd_sel_peak_tl, i)
+                    array.remove(seq_cd_sel_inters, i)
+        else
+            // bars 1-12: standard close condition
+            bool inters_ok = cnt > 0 or (not enable_seq_intersection) or array.get(seq_cd_sel_inters, i)
+            // bool inters_ok = true
+            if inters_ok
+                if cd_std_q
+                    int new_cnt = cnt + 1
+                    
+                    if new_cnt == 5
+                        array.set(seq_cd_sel_b5cls, i, close)
+                        array.set(cd_sel_cnts, i, new_cnt)
+                    else if new_cnt == 8
+                        bool set_sell_b8c = not enable_8_vs_5
+                        if enable_8_vs_5
+                            float b5c = array.get(seq_cd_sel_b5cls, i)
+                            set_sell_b8c := not na(b5c) and high >= b5c
+                        
+                        if set_sell_b8c
+                            // if use_aggressive_mode
+                            //     array.set(cd_sel_b8cls, i, high)
+                            // else
+                            array.set(cd_sel_b8cls, i, close)
+                            array.set(cd_sel_cnts, i, new_cnt)
+                    else
+                        array.set(cd_sel_cnts, i, new_cnt)
+        i -= 1
+    if show_all_bars == ENABLE_SHOW_ALL_BAR_Y and cd_std_q and array.size(cd_sel_cnts) > 0
+        int    last_i   = array.size(cd_sel_cnts) - 1
+        int    last_cnt = array.get(cd_sel_cnts, last_i)
+        sell_countdown_label_non_13 = label.new(x = bar_index, y = high * (1 + cd_offset), text = str.tostring(last_cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = seq_cd_sell_color, style = label.style_label_down, size = cd_font_size, text_formatting = text.format_none)
+
+
+
+// ── Combo Buy Countdown ───────────────────────────────────────────────────────
+// On setup bar 9 (bar_index == start_bi): retroactive scan from bar 1 to bar 9.
+// On subsequent bars: evaluate current bar only.
+// // Multiple simultaneous countdowns run in parallel via indexed arrays.
+// if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_buy_cnts) > 0
+if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
+    int i = array.size(combo_cd_buy_cnts) - 1
+    while i >= 0
+        int   cnt       = array.get(combo_cd_buy_cnts,     i)
+        float prev_cls  = array.get(combo_cd_buy_prev_cls, i)
+        int   start_bi  = array.get(combo_cd_buy_start_bi, i) // bar 9 index
+        int   b1_bi     = array.get(combo_cd_buy_b1_bi,    i) // bar 1 index
+        int   scan_from = bar_index == start_bi ? bar_index - b1_bi : 0
+
+        bool  completed = false
+        for k = scan_from to 0
+            // Peak tracking: running-min true_low for risk level
+            float k_th = math.max(high[k], nz(close[k+1], high[k]))
+            float k_tl = math.min(low[k],  nz(close[k+1], low[k]))
+            float cur_peak_tl = array.get(combo_cd_buy_peak_tl, i)
+            if na(cur_peak_tl) or k_tl < cur_peak_tl
+                array.set(combo_cd_buy_peak_tl, i, k_tl)
+                array.set(combo_cd_buy_peak_th, i, k_th)
+
+
+            float bk_close = close[k]
+
+            float bk_low   = low[k]
+
+            bool c1 = false
+            bool c2 = false
+            bool c3 = false
+            bool c4 = false
+
+            if combo_version == COMBO_AGGRESSIVE
+                int placeholder = 1
+            else if cnt == cd_bars - 1
+                float buy_cur = cd_term_val == PRICE_CLOSE ? close[k] : cd_term_val == PRICE_OPEN_CLOSE ? math.min(open[k], close[k]) : low[k] //1. The close must be less than, or equal to, the low two price bars earlier (only bar 13 specical);
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? buy_cur <= low[k + 2] : buy_cur < low[k + 2]
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
+                // c2 := bk_low   < low[k + 1]
+                c3 := buy_cur < prev_cls
+                c4 := buy_cur < close[k + 1]
+            else
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? bk_close <= low[k + 2] : bk_close < low[k + 2] //1. The close must be less than, or equal to, the low two price bars earlier;
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
+                // c2 := bk_low   <= low[k + 1]
+                c3 := na(prev_cls) or bk_close < prev_cls
+                c4 := bk_close < close[k + 1]
+            
+            if combo_version == COMBO_STANDARD and cnt >= 10 // Bars 11-13: only need successively higher closes
+                c1 := true
+                c2 := true
+                // c3 := true
+            
+            
+            if c1 and c2 and c3 and c4
+                cnt     += 1
+                prev_cls := bk_close
+                if cnt == cd_bars
+                    buy_combo_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
+                    string label_txt = str.tostring(cd_bars)
+                    label_txt :=str.tostring(cd_bars)
+                    label.new(x = bar_index - k, y = low[k] * (1 - cd_offset), text = label_txt, xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size, text_formatting = buy_combo_bar_13_text_format)
+                    completed := true
+
+                    if enable_combo_risk_level or enable_combo_risk_zone
+                        float peak_th = array.get(combo_cd_buy_peak_th, i)
+                        float peak_tl = array.get(combo_cd_buy_peak_tl, i)
+                        if not na(peak_th) and not na(peak_tl)
+                            float rl = peak_tl - (peak_th - peak_tl)
+                            float final_combo_cd_buy_risk_level = rl * (1 - tdst_offset)
+                            combo_cd_risk_buy_price := rl
+                            if not na(combo_cd_risk_buy_line)
+                                line.set_x2(combo_cd_risk_buy_line, bar_index)
+                                line.set_extend(combo_cd_risk_buy_line, extend.none)
+                            color combo_buy_rl_color = enable_combo_risk_level ? combo_cd_buy_color : color.new(color.white, 100)
+                            combo_cd_risk_buy_line := line.new(bar_index, final_combo_cd_buy_risk_level, bar_index, final_combo_cd_buy_risk_level, extend=extend.none, color=combo_buy_rl_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_combo_risk_zone
+                                if not na(combo_cd_risk_buy_ref_line)
+                                    line.set_x2(combo_cd_risk_buy_ref_line, bar_index)
+                                    line.set_extend(combo_cd_risk_buy_ref_line, extend.none)
+                                combo_cd_risk_buy_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                combo_cd_risk_buy_fill := linefill.new(combo_cd_risk_buy_ref_line, combo_cd_risk_buy_line, color=risk_buy_zone_color)
+
+                    break
+                else if show_all_bars == ENABLE_SHOW_ALL_BAR_Y
+                    int ttt = 1
+                    label.new(x = bar_index - k, y = low[k] * (1 - 10*cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size)
+        if completed
+            array.remove(combo_cd_buy_cnts,     i)
+            array.remove(combo_cd_buy_prev_cls, i)
+            array.remove(combo_cd_buy_start_bi, i)
+            array.remove(combo_cd_buy_b1_bi,    i)
+            array.remove(combo_cd_buy_peak_th,  i)
+            array.remove(combo_cd_buy_peak_tl,  i)
+
+        else
+            array.set(combo_cd_buy_cnts,     i, cnt)
+            array.set(combo_cd_buy_prev_cls, i, prev_cls)
+        i -= 1
+
+// ── Combo Sell Countdown ──────────────────────────────────────────────────────
+//2007-10-09, 2007-07-13, 2007-06-01 1987-01-12 2005-07-12, 2009-02-23, 2008-11-20,1995-11-03
+//2013-01-11, 2013-01-03, 2009-02-23 2005-03-07 2002-05-01 1998-12-30 1998-04-06 1998-02-05
+//2015-11-04, 2014-11-11,2012-09-14, 2007-10-01,2002-06-12,2002-06-03,2002-05-02, 1999-01-20, 1998-02-27,1990-07-13, 1990-06-13
+// Standard mode:
+// Termination: Close: 090309, 20090223, 20081120, 20071005, 20070712, 20070530,
+// 
+// Termination: Open/close : 20121219， 20070601， 20050307，20040915， 19980205， 19970705， 19961126， 19950921， 19941209， 19940111， 1991114， 19910212， 19900925， 19900604， 19890420,19890201， 19890110， 19881024， 19870814
+//
+// if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_sel_cnts) > 0
+if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
+    int i = array.size(combo_cd_sel_cnts) - 1
+    while i >= 0
+        int   cnt      = array.get(combo_cd_sel_cnts,     i)
+        float prev_cls = array.get(combo_cd_sel_prev_cls, i)
+        int   start_bi = array.get(combo_cd_sel_start_bi, i)
+        int   b1_bi    = array.get(combo_cd_sel_b1_bi,    i)
+        int   scan_from = bar_index == start_bi ? bar_index - b1_bi : 0
+        bool  completed = false
+        for k = scan_from to 0
+            // Peak tracking: running-max true_high for risk level
+            float k_th = math.max(high[k], nz(close[k+1], high[k]))
+            float k_tl = math.min(low[k],  nz(close[k+1], low[k]))
+            float cur_peak_th = array.get(combo_cd_sel_peak_th, i)
+            if na(cur_peak_th) or k_th > cur_peak_th
+                array.set(combo_cd_sel_peak_th, i, k_th)
+                array.set(combo_cd_sel_peak_tl, i, k_tl)
+
+            float bk_close = close[k]
+            float bk_high  = high[k]
+            bool  c1 = false
+            bool c2 = false
+            bool c3 = false
+            bool c4 = false
+            
+            if combo_version == COMBO_AGGRESSIVE
+                int placeholder = 1
+            else if cnt == cd_bars - 1
+                float sell_cur   = cd_term_val == PRICE_CLOSE ? close[k] : cd_term_val == PRICE_OPEN_CLOSE ? math.max(open[k], close[k]) : high[k]
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? sell_cur >= high[k + 2] : sell_cur > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier (only bar 13 specical);
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_high  >= high[k + 1] : bk_high  > high[k + 1] 
+                c3 := sell_cur > prev_cls
+                c4 := sell_cur > close[k + 1]
+            else
+                c1 := cd_compare == COMPARE_WITH_EQUAL ? bk_close >= high[k + 2] :  bk_close > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier;
+                c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_high  >= high[k + 1] : bk_high  > high[k + 1]
+                c3 := na(prev_cls) or bk_close > prev_cls
+                c4 := bk_close > close[k + 1]
+            
+            if combo_version == COMBO_STANDARD and cnt >= 10 // Bars 11-13: only need successively higher closes
+                c1 := true
+                c2 := true
+                c4 := true
+            
+        
+            if c1 and c2 and c3 and c4
+                cnt     += 1
+                prev_cls := bk_close
+                if cnt == cd_bars
+                    sell_combo_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
+                    label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cd_bars), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = sell_combo_bar_13_text_format)
+                    completed := true
+                    if enable_combo_risk_level or enable_combo_risk_zone
+                        float peak_th = array.get(combo_cd_sel_peak_th, i)
+                        float peak_tl = array.get(combo_cd_sel_peak_tl, i)
+                        if not na(peak_th) and not na(peak_tl)
+                            float rl = peak_th + (peak_th - peak_tl)
+                            float final_combo_cd_sell_risk_level = rl * (1 + tdst_offset)
+                            combo_cd_risk_sel_price := rl
+                            if not na(combo_cd_risk_sel_line)
+                                line.set_x2(combo_cd_risk_sel_line, bar_index)
+                                line.set_extend(combo_cd_risk_sel_line, extend.none)
+                            color combo_sell_rl_color = enable_combo_risk_level ? combo_cd_sell_color : color.new(color.white, 100)
+                            combo_cd_risk_sel_line := line.new(bar_index, final_combo_cd_sell_risk_level, bar_index, final_combo_cd_sell_risk_level, extend=extend.none, color=combo_sell_rl_color, style=line.style_dashed, width=risk_level_line_weight)
+                            if enable_combo_risk_zone
+                                if not na(combo_cd_risk_sel_ref_line)
+                                    line.set_x2(combo_cd_risk_sel_ref_line, bar_index)
+                                    line.set_extend(combo_cd_risk_sel_ref_line, extend.none)
+                                combo_cd_risk_sel_ref_line := line.new(bar_index, close, bar_index, close, extend=extend.none, color=color.new(color.white, 100), width=1)
+                                combo_cd_risk_sel_fill := linefill.new(combo_cd_risk_sel_line, combo_cd_risk_sel_ref_line, color=color.new(combo_cd_sell_color, 90))
+
+
+                    break
+                else if show_all_bars == ENABLE_SHOW_ALL_BAR_Y
+                    int x = 1
+                    label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size)
+        if completed
+            array.remove(combo_cd_sel_cnts,     i)
+            array.remove(combo_cd_sel_prev_cls, i)
+            array.remove(combo_cd_sel_start_bi, i)
+            array.remove(combo_cd_sel_b1_bi,    i)
+            array.remove(combo_cd_sel_peak_th,  i)
+            array.remove(combo_cd_sel_peak_tl,  i)
+        else
+            array.set(combo_cd_sel_cnts,     i, cnt)
+            array.set(combo_cd_sel_prev_cls, i, prev_cls)
+        i -= 1
