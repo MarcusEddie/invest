@@ -121,7 +121,7 @@ var linefill     combo_cd_risk_buy_fill     = na
 var linefill     combo_cd_risk_sel_fill     = na
 
 type CountdownState
-    int type // sequential=1, combo=0
+    int type // sequential=1, combo=2
     int direction        // sell=1, buy=0
     int count
     float bar8C
@@ -129,6 +129,10 @@ type CountdownState
     float peakTrueHigh 
     float peakTrueLow
     bool intersectionStatus
+    float prevClose
+    int bar9Idx
+    int bar1Idx
+
 
 // ── Countdown State (parallel arrays; one entry per active countdown) ─────────
 var array<int>   seq_cd_buy_ts    = array.new<int>()     // bar-9 start timestamp per active buy countdown
@@ -137,19 +141,8 @@ var array<int> seq_cd_intersection_bar_9_checked = array.new<int>()
 var array<CountdownState> seqBuyCountdownQueue = array.new<CountdownState>()
 var array<CountdownState> seqSellCountdownQueue = array.new<CountdownState>()
 
-var array<int>   combo_cd_buy_cnts     = array.new<int>()
-var array<float> combo_cd_buy_prev_cls = array.new<float>()
-var array<int>   combo_cd_buy_start_bi = array.new<int>()
-var array<int>   combo_cd_buy_b1_bi    = array.new<int>()
-var array<int>   combo_cd_sel_cnts     = array.new<int>()
-var array<float> combo_cd_sel_prev_cls = array.new<float>()
-var array<int>   combo_cd_sel_start_bi = array.new<int>()
-var array<int>   combo_cd_sel_b1_bi    = array.new<int>()
-
-var array<float> combo_cd_buy_peak_th = array.new<float>()
-var array<float> combo_cd_buy_peak_tl = array.new<float>()
-var array<float> combo_cd_sel_peak_th = array.new<float>()
-var array<float> combo_cd_sel_peak_tl = array.new<float>()
+var array<CountdownState> comboBuyCountdownQueue = array.new<CountdownState>()
+var array<CountdownState> comboSellCountdownQueue = array.new<CountdownState>()
 
 // var float offset = 0.01
 var float offset = 0
@@ -199,36 +192,33 @@ if buy_cond
 
         if buy_cnt == setup_len
             buy_done := true
-            seqBuyCountdown = CountdownState.new(type=1, direction=0, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false) 
-            
-            bool buy_inters_done = false
-            if enable_sequential_countdown and enable_seq_intersection
-                for i = 4 to setup_len 
-                    if high[1] >=  low[i]
-                        buy_inters_done := true
-                        seqBuyCountdown.intersectionStatus := true
-                        float final_price = low[i] * (1 - intersection_line_offset)
-                        buy_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
-                        break
-                if not buy_inters_done
-                    array.push(seq_cd_intersection_bar_9_checked, bar_index)
-                    for i = 3 to setup_len
-                        if high >= low[i]
+            if enable_sequential_countdown
+                seqBuyCountdown = CountdownState.new(type=1, direction=0, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false, prevClose=na, bar9Idx=na, bar1Idx=na) 
+                
+                bool buy_inters_done = false
+                if enable_seq_intersection
+                    for i = 4 to setup_len 
+                        if high[1] >=  low[i]
                             buy_inters_done := true
                             seqBuyCountdown.intersectionStatus := true
                             float final_price = low[i] * (1 - intersection_line_offset)
-                            buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                            buy_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
                             break
-                
-            array.push(seqBuyCountdownQueue, seqBuyCountdown)
+                    if not buy_inters_done
+                        array.push(seq_cd_intersection_bar_9_checked, bar_index)
+                        for i = 3 to setup_len
+                            if high >= low[i]
+                                buy_inters_done := true
+                                seqBuyCountdown.intersectionStatus := true
+                                float final_price = low[i] * (1 - intersection_line_offset)
+                                buy_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_buy_color, width=2)
+                                break
+                    
+                array.push(seqBuyCountdownQueue, seqBuyCountdown)
             
             if enable_combo_countdown
-                array.push(combo_cd_buy_cnts,     0)
-                array.push(combo_cd_buy_prev_cls, na)
-                array.push(combo_cd_buy_start_bi, bar_index)
-                array.push(combo_cd_buy_b1_bi,    array.get(buy_bi, 0))
-                array.push(combo_cd_buy_peak_th,  na)
-                array.push(combo_cd_buy_peak_tl,  na)
+                comboBuyCountdown = CountdownState.new(type=2, direction=0, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false, prevClose=na, bar9Idx=bar_index, bar1Idx=array.get(buy_bi, 0)) 
+                array.push(comboBuyCountdownQueue, comboBuyCountdown)
 
             // array.push(seq_cd_buy_ts, time)
             // Sell countdown risk level terminates at Buy Setup 9
@@ -357,36 +347,34 @@ if sel_cond
 
         if sel_cnt == setup_len
             sel_done := true
-            seqSellCountdown = CountdownState.new(type=1, direction=1, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false) 
+            
+            if enable_sequential_countdown
+                seqSellCountdown = CountdownState.new(type=1, direction=1, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false, prevClose=na, bar9Idx=na, bar1Idx=na) 
 
-            bool sel_inters_done = false
-            if enable_sequential_countdown and enable_seq_intersection
-                for i = 4 to setup_len
-                    if low[1] <= high[i]
-                        sel_inters_done := true
-                        seqSellCountdown.intersectionStatus := true
-                        float final_price = high[i] * (1 + intersection_line_offset)
-                        sell_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
-                        break
-                
-                if not sel_inters_done
-                    array.push(seq_cd_intersection_bar_9_checked, bar_index)
-                    for i = 3 to setup_len
-                        if low <= high[i]
+                bool sel_inters_done = false
+                if enable_seq_intersection
+                    for i = 4 to setup_len
+                        if low[1] <= high[i]
                             sel_inters_done := true
                             seqSellCountdown.intersectionStatus := true
                             float final_price = high[i] * (1 + intersection_line_offset)
-                            sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                            sell_intersec_line = line.new(bar_index - 2, final_price, bar_index, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
                             break
+                    
+                    if not sel_inters_done
+                        array.push(seq_cd_intersection_bar_9_checked, bar_index)
+                        for i = 3 to setup_len
+                            if low <= high[i]
+                                sel_inters_done := true
+                                seqSellCountdown.intersectionStatus := true
+                                float final_price = high[i] * (1 + intersection_line_offset)
+                                sell_intersec_line = line.new(bar_index - 1, final_price, bar_index + 1, final_price, xloc=xloc.bar_index, color=seq_cd_sell_color, width=2)
+                                break
 
-            array.push(seqSellCountdownQueue, seqSellCountdown)
+                array.push(seqSellCountdownQueue, seqSellCountdown)
             if enable_combo_countdown
-                array.push(combo_cd_sel_cnts,     0)
-                array.push(combo_cd_sel_prev_cls, na)
-                array.push(combo_cd_sel_start_bi, bar_index)
-                array.push(combo_cd_sel_b1_bi,    array.get(sel_bi, 0))
-                array.push(combo_cd_sel_peak_th,  na)
-                array.push(combo_cd_sel_peak_tl,  na)
+                comboSellCountdown = CountdownState.new(type=2, direction=1, count=0, bar8C=na, bar5C=na, peakTrueHigh=na, peakTrueLow=na, intersectionStatus=false, prevClose=na, bar9Idx=bar_index, bar1Idx=array.get(sel_bi, 0)) 
+                array.push(comboSellCountdownQueue, comboSellCountdown)
             // array.push(cd_sel_ts,    time)
 
             // Buy countdown risk level terminates at Sell Setup 9
@@ -562,7 +550,6 @@ if enable_sequential_countdown and array.size(seqBuyCountdownQueue) > 0
         buy_cur := low
     bool  cd_term_q = cd_compare == COMPARE_WITH_EQUAL ? buy_cur <= low[cd_look_back] : buy_cur < low[cd_look_back]
     float std_compare_val = use_aggressive_mode ? low : close
-    // bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   <= low[cd_look_back] : close   < low[cd_look_back]
     bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? std_compare_val   <= low[cd_look_back] : std_compare_val   < low[cd_look_back]
     int qIdx = array.size(seqBuyCountdownQueue) - 1
     while qIdx >= 0
@@ -682,7 +669,6 @@ if enable_sequential_countdown and array.size(seqSellCountdownQueue) > 0
         sel_cur := high
     bool  cd_term_q = cd_compare == COMPARE_WITH_EQUAL ? sel_cur >= high[cd_look_back] : sel_cur > high[cd_look_back]
     float std_compare_val = use_aggressive_mode ? high : close
-    // bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? close   >= high[cd_look_back] : close   > high[cd_look_back]
     bool  cd_std_q  = cd_compare == COMPARE_WITH_EQUAL ? std_compare_val >= high[cd_look_back] : std_compare_val > high[cd_look_back]
     int qIdx = array.size(seqSellCountdownQueue) - 1
     while qIdx >= 0
@@ -773,14 +759,13 @@ if enable_sequential_countdown and array.size(seqSellCountdownQueue) > 0
 // On setup bar 9 (bar_index == start_bi): retroactive scan from bar 1 to bar 9.
 // On subsequent bars: evaluate current bar only.
 // // Multiple simultaneous countdowns run in parallel via indexed arrays.
-// if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_buy_cnts) > 0
-if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
-    int i = array.size(combo_cd_buy_cnts) - 1
-    while i >= 0
-        int   cnt       = array.get(combo_cd_buy_cnts,     i)
-        float prev_cls  = array.get(combo_cd_buy_prev_cls, i)
-        int   start_bi  = array.get(combo_cd_buy_start_bi, i) // bar 9 index
-        int   b1_bi     = array.get(combo_cd_buy_b1_bi,    i) // bar 1 index
+if enable_combo_countdown and array.size(comboBuyCountdownQueue) > 0
+    int qIdx = array.size(comboBuyCountdownQueue) - 1
+    while qIdx >= 0
+        CountdownState buyComboCountdown = array.get(comboBuyCountdownQueue, qIdx)
+        float prev_cls = buyComboCountdown.prevClose
+        int start_bi = buyComboCountdown.bar9Idx // bar 9 index
+        int b1_bi = buyComboCountdown.bar1Idx // bar 1 index 
         int   scan_from = bar_index == start_bi ? bar_index - b1_bi : 0
 
         bool  completed = false
@@ -788,14 +773,12 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
             // Peak tracking: running-min true_low for risk level
             float k_th = math.max(high[k], nz(close[k+1], high[k]))
             float k_tl = math.min(low[k],  nz(close[k+1], low[k]))
-            float cur_peak_tl = array.get(combo_cd_buy_peak_tl, i)
+            float cur_peak_tl = buyComboCountdown.peakTrueLow
             if na(cur_peak_tl) or k_tl < cur_peak_tl
-                array.set(combo_cd_buy_peak_tl, i, k_tl)
-                array.set(combo_cd_buy_peak_th, i, k_th)
-
+                buyComboCountdown.peakTrueLow := k_tl
+                buyComboCountdown.peakTrueHigh := k_th
 
             float bk_close = close[k]
-
             float bk_low   = low[k]
 
             bool c1 = false
@@ -805,7 +788,7 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
 
             if combo_version == COMBO_AGGRESSIVE
                 int placeholder = 1
-            else if cnt == cd_bars - 1
+            else if buyComboCountdown.count == cd_bars - 1
                 float buy_cur = cd_term_val == PRICE_CLOSE ? close[k] : cd_term_val == PRICE_OPEN_CLOSE ? math.min(open[k], close[k]) : low[k] //1. The close must be less than, or equal to, the low two price bars earlier (only bar 13 specical);
                 c1 := cd_compare == COMPARE_WITH_EQUAL ? buy_cur <= low[k + 2] : buy_cur < low[k + 2]
                 c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_low   <= low[k + 1] : bk_low   < low[k + 1]
@@ -819,16 +802,18 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
                 c3 := na(prev_cls) or bk_close < prev_cls
                 c4 := bk_close < close[k + 1]
             
-            if combo_version == COMBO_STANDARD and cnt >= 10 // Bars 11-13: only need successively higher closes
+            if combo_version == COMBO_STANDARD and buyComboCountdown.count >= 10 // Bars 11-13: only need successively higher closes
                 c1 := true
                 c2 := true
-                // c3 := true
+                c4 := true
             
             
             if c1 and c2 and c3 and c4
-                cnt     += 1
-                prev_cls := bk_close
-                if cnt == cd_bars
+                int new_cnt = buyComboCountdown.count + 1
+                buyComboCountdown.count :=  new_cnt
+                buyComboCountdown.prevClose := bk_close
+
+                if buyComboCountdown.count == cd_bars
                     buy_combo_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
                     string label_txt = str.tostring(cd_bars)
                     label_txt :=str.tostring(cd_bars)
@@ -836,8 +821,8 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
                     completed := true
 
                     if enable_combo_risk_level or enable_combo_risk_zone
-                        float peak_th = array.get(combo_cd_buy_peak_th, i)
-                        float peak_tl = array.get(combo_cd_buy_peak_tl, i)
+                        float peak_th = buyComboCountdown.peakTrueHigh
+                        float peak_tl = buyComboCountdown.peakTrueLow
                         if not na(peak_th) and not na(peak_tl)
                             float rl = peak_tl - (peak_th - peak_tl)
                             float final_combo_cd_buy_risk_level = rl * (1 - tdst_offset)
@@ -857,19 +842,11 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
                     break
                 else if show_all_bars == ENABLE_SHOW_ALL_BAR_Y
                     int ttt = 1
-                    label.new(x = bar_index - k, y = low[k] * (1 - 10*cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size)
+                    label.new(x = bar_index - k, y = low[k] * (1 - 10*cd_offset), text = str.tostring(buyComboCountdown.count), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_buy_color, style = label.style_label_up, size = font_size)
+        
         if completed
-            array.remove(combo_cd_buy_cnts,     i)
-            array.remove(combo_cd_buy_prev_cls, i)
-            array.remove(combo_cd_buy_start_bi, i)
-            array.remove(combo_cd_buy_b1_bi,    i)
-            array.remove(combo_cd_buy_peak_th,  i)
-            array.remove(combo_cd_buy_peak_tl,  i)
-
-        else
-            array.set(combo_cd_buy_cnts,     i, cnt)
-            array.set(combo_cd_buy_prev_cls, i, prev_cls)
-        i -= 1
+            array.remove(comboBuyCountdownQueue, qIdx)
+        qIdx -= 1
 
 // ── Combo Sell Countdown ──────────────────────────────────────────────────────
 //2007-10-09, 2007-07-13, 2007-06-01 1987-01-12 2005-07-12, 2009-02-23, 2008-11-20,1995-11-03
@@ -880,24 +857,23 @@ if enable_combo_countdown and array.size(combo_cd_buy_cnts) > 0
 // 
 // Termination: Open/close : 20121219， 20070601， 20050307，20040915， 19980205， 19970705， 19961126， 19950921， 19941209， 19940111， 1991114， 19910212， 19900925， 19900604， 19890420,19890201， 19890110， 19881024， 19870814
 //
-// if enable_combo_countdown and combo_version != "Aggressive" and array.size(combo_cd_sel_cnts) > 0
-if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
-    int i = array.size(combo_cd_sel_cnts) - 1
-    while i >= 0
-        int   cnt      = array.get(combo_cd_sel_cnts,     i)
-        float prev_cls = array.get(combo_cd_sel_prev_cls, i)
-        int   start_bi = array.get(combo_cd_sel_start_bi, i)
-        int   b1_bi    = array.get(combo_cd_sel_b1_bi,    i)
+if enable_combo_countdown and array.size(comboSellCountdownQueue) > 0
+    int qIdx = array.size(comboSellCountdownQueue) - 1
+    while qIdx >= 0
+        CountdownState sellComboCountdown = array.get(comboSellCountdownQueue, qIdx)
+        float prev_cls = sellComboCountdown.prevClose
+        int start_bi = sellComboCountdown.bar9Idx
+        int b1_bi = sellComboCountdown.bar1Idx
         int   scan_from = bar_index == start_bi ? bar_index - b1_bi : 0
         bool  completed = false
         for k = scan_from to 0
             // Peak tracking: running-max true_high for risk level
             float k_th = math.max(high[k], nz(close[k+1], high[k]))
             float k_tl = math.min(low[k],  nz(close[k+1], low[k]))
-            float cur_peak_th = array.get(combo_cd_sel_peak_th, i)
+            float cur_peak_th = sellComboCountdown.peakTrueHigh
             if na(cur_peak_th) or k_th > cur_peak_th
-                array.set(combo_cd_sel_peak_th, i, k_th)
-                array.set(combo_cd_sel_peak_tl, i, k_tl)
+                sellComboCountdown.peakTrueHigh := k_th
+                sellComboCountdown.peakTrueLow := k_tl
 
             float bk_close = close[k]
             float bk_high  = high[k]
@@ -908,7 +884,7 @@ if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
             
             if combo_version == COMBO_AGGRESSIVE
                 int placeholder = 1
-            else if cnt == cd_bars - 1
+            else if sellComboCountdown.count == cd_bars - 1
                 float sell_cur   = cd_term_val == PRICE_CLOSE ? close[k] : cd_term_val == PRICE_OPEN_CLOSE ? math.max(open[k], close[k]) : high[k]
                 c1 := cd_compare == COMPARE_WITH_EQUAL ? sell_cur >= high[k + 2] : sell_cur > high[k + 2] // 1. The close must be greater than, or equal to, the high two price bars earlier (only bar 13 specical);
                 c2 := cd_compare == COMPARE_WITH_EQUAL ? bk_high  >= high[k + 1] : bk_high  > high[k + 1] 
@@ -920,22 +896,24 @@ if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
                 c3 := na(prev_cls) or bk_close > prev_cls
                 c4 := bk_close > close[k + 1]
             
-            if combo_version == COMBO_STANDARD and cnt >= 10 // Bars 11-13: only need successively higher closes
+            if combo_version == COMBO_STANDARD and sellComboCountdown.count >= 10 // Bars 11-13: only need successively higher closes
                 c1 := true
                 c2 := true
                 c4 := true
             
         
             if c1 and c2 and c3 and c4
-                cnt     += 1
-                prev_cls := bk_close
-                if cnt == cd_bars
+                sellComboCountdown.prevClose := bk_close
+                int new_cnt = sellComboCountdown.count + 1
+                sellComboCountdown.count := new_cnt
+
+                if sellComboCountdown.count == cd_bars
                     sell_combo_bar_13_text_format = cd_label_bold == LABEL_BOLD ? text.format_bold : text.format_none
                     label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cd_bars), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size, text_formatting = sell_combo_bar_13_text_format)
                     completed := true
                     if enable_combo_risk_level or enable_combo_risk_zone
-                        float peak_th = array.get(combo_cd_sel_peak_th, i)
-                        float peak_tl = array.get(combo_cd_sel_peak_tl, i)
+                        float peak_th = sellComboCountdown.peakTrueHigh
+                        float peak_tl = sellComboCountdown.peakTrueLow
                         if not na(peak_th) and not na(peak_tl)
                             float rl = peak_th + (peak_th - peak_tl)
                             float final_combo_cd_sell_risk_level = rl * (1 + tdst_offset)
@@ -956,15 +934,9 @@ if enable_combo_countdown and array.size(combo_cd_sel_cnts) > 0
                     break
                 else if show_all_bars == ENABLE_SHOW_ALL_BAR_Y
                     int x = 1
-                    label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(cnt), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size)
+                    label.new(x = bar_index - k, y = high[k] * (1 + cd_offset), text = str.tostring(sellComboCountdown.count), xloc = xloc.bar_index, yloc = yloc.price, color = color.new(color.white, 100), textcolor = combo_cd_sell_color, style = label.style_label_down, size = font_size)
+        
         if completed
-            array.remove(combo_cd_sel_cnts,     i)
-            array.remove(combo_cd_sel_prev_cls, i)
-            array.remove(combo_cd_sel_start_bi, i)
-            array.remove(combo_cd_sel_b1_bi,    i)
-            array.remove(combo_cd_sel_peak_th,  i)
-            array.remove(combo_cd_sel_peak_tl,  i)
-        else
-            array.set(combo_cd_sel_cnts,     i, cnt)
-            array.set(combo_cd_sel_prev_cls, i, prev_cls)
-        i -= 1
+            array.remove(comboSellCountdownQueue, qIdx)
+            
+        qIdx -= 1
