@@ -66,6 +66,9 @@ combo_version = input.string(COMBO_STANDARD, "Combo version", options=[COMBO_STA
 enable_combo_risk_level = input.bool(false,                      "Enable Risk Level",       group="Combo Countdown", display = display.none)
 enable_combo_risk_zone = input.bool(false,                      "Enable Risk Level Zone",       group="Combo Countdown", display = display.none)
 
+enable_recycle = input.bool(false,        "Enable Recycle", group="Recycle", display = display.none)
+setup_count = input.int(22,        "Setup Count", group="Recycle", display = display.none)
+
 enable_breakout_qualifier = input.bool(false,        "Enable Breakout Qualifiers", group="Breakout qualifiers", display = display.none)
 
 // ── State ─────────────────────────────────────────────────────────────────────
